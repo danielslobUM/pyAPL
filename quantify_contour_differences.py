@@ -17,8 +17,6 @@ Converted to Python
 import os
 import re
 import warnings
-import tkinter as tk
-from tkinter import filedialog
 import pandas as pd
 import numpy as np
 from read_dicomct_light import read_dicomct_light
@@ -28,6 +26,14 @@ from calculate_dice_logical import calculate_dice_logical
 from calculate_surface_dsc import calculate_surface_dsc
 from calculate_different_path_length_v2 import calculate_different_path_length_v2
 from has_contour_points_local import has_contour_points_local
+
+# Try to import tkinter for GUI, fall back to CLI if not available
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+    HAS_TKINTER = True
+except ImportError:
+    HAS_TKINTER = False
 
 
 def quantify_contour_differences(calc_all_parameters=1, root_folder=None):
@@ -62,42 +68,61 @@ def quantify_contour_differences(calc_all_parameters=1, root_folder=None):
     apl_tolerance = 0.1
     sdsc_tolerance = 0.1
     
-    # Initialize tkinter for folder selection
-    root = tk.Tk()
-    root.withdraw()
-    
-    # Select imaging data folder
-    imaging_data_folder = filedialog.askdirectory(
-        initialdir=root_folder,
-        title='Select folder with imaging data'
-    )
-    if not imaging_data_folder:
-        print("No imaging data folder selected. Exiting.")
-        return None
+    # Select folders (GUI or CLI)
+    if HAS_TKINTER:
+        # Initialize tkinter for folder selection
+        root = tk.Tk()
+        root.withdraw()
+        
+        # Select imaging data folder
+        imaging_data_folder = filedialog.askdirectory(
+            initialdir=root_folder,
+            title='Select folder with imaging data'
+        )
+        if not imaging_data_folder:
+            print("No imaging data folder selected. Exiting.")
+            return None
+        
+        # Select RTSTRUCT folder for method/person 1
+        struct_folder_method1 = filedialog.askdirectory(
+            initialdir=root_folder,
+            title='Select folder with RTSTRUCT data of method/person 1 (reference data)'
+        )
+        if not struct_folder_method1:
+            print("No method 1 folder selected. Exiting.")
+            return None
+        
+        # Select RTSTRUCT folder for method/person 2
+        struct_folder_method2 = filedialog.askdirectory(
+            initialdir=root_folder,
+            title='Select folder with RTSTRUCT data of method/person 2 (new data)'
+        )
+        if not struct_folder_method2:
+            print("No method 2 folder selected. Exiting.")
+            return None
+    else:
+        # CLI input
+        print("GUI not available. Using command-line input.")
+        imaging_data_folder = input("Enter path to imaging data folder: ").strip()
+        if not os.path.isdir(imaging_data_folder):
+            print(f"Invalid folder: {imaging_data_folder}")
+            return None
+        
+        struct_folder_method1 = input("Enter path to RTSTRUCT folder for method/person 1: ").strip()
+        if not os.path.isdir(struct_folder_method1):
+            print(f"Invalid folder: {struct_folder_method1}")
+            return None
+        
+        struct_folder_method2 = input("Enter path to RTSTRUCT folder for method/person 2: ").strip()
+        if not os.path.isdir(struct_folder_method2):
+            print(f"Invalid folder: {struct_folder_method2}")
+            return None
     
     dirnames_imaging_data = [d for d in os.listdir(imaging_data_folder) 
                             if os.path.isdir(os.path.join(imaging_data_folder, d))]
     
-    # Select RTSTRUCT folder for method/person 1
-    struct_folder_method1 = filedialog.askdirectory(
-        initialdir=root_folder,
-        title='Select folder with RTSTRUCT data of method/person 1 (reference data)'
-    )
-    if not struct_folder_method1:
-        print("No method 1 folder selected. Exiting.")
-        return None
-    
     rtstruct_files_method1 = [f for f in os.listdir(struct_folder_method1) 
                              if os.path.isfile(os.path.join(struct_folder_method1, f))]
-    
-    # Select RTSTRUCT folder for method/person 2
-    struct_folder_method2 = filedialog.askdirectory(
-        initialdir=root_folder,
-        title='Select folder with RTSTRUCT data of method/person 2 (new data)'
-    )
-    if not struct_folder_method2:
-        print("No method 2 folder selected. Exiting.")
-        return None
     
     rtstruct_files_method2 = [f for f in os.listdir(struct_folder_method2) 
                              if os.path.isfile(os.path.join(struct_folder_method2, f))]
