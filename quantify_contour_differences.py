@@ -32,8 +32,9 @@ try:
     import tkinter as tk
     from tkinter import filedialog
     HAS_TKINTER = True
-except ImportError:
+except (ImportError, ModuleNotFoundError) as e:
     HAS_TKINTER = False
+    # Note: tkinter may fail on headless systems or if not installed
 
 
 def quantify_contour_differences(calc_all_parameters=1, root_folder=None):
