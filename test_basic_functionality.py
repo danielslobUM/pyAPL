@@ -82,12 +82,17 @@ def test_module_imports():
     
     modules = [
         'read_dicomct_light',
+        'read_dicomct',
         'read_dicomrtstruct',
         'resample_contour_slices',
         'compose_struct_matrix',
         'calculate_surface_dsc',
         'calculate_different_path_length_v2',
         'calculate_voxel_diff_counts',
+        'calculate_dice',
+        'calculate_dice_logical',
+        'calculate_path_length',
+        'calculate_path_length_interpolated',
         'quantify_contour_differences',
     ]
     
