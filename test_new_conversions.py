@@ -33,6 +33,13 @@ def test_calculate_dice():
     assert abs(dice - expected_dice) < 0.001, f"Expected DICE={expected_dice:.3f}, got {dice}"
     print(f"  ✓ Partial overlap: DICE = {dice:.3f}")
     
+    # Empty volumes (edge case)
+    voi_empty1 = np.zeros((3, 3, 3), dtype=np.uint16)
+    voi_empty2 = np.zeros((3, 3, 3), dtype=np.uint16)
+    dice = calculate_dice(voi_empty1, voi_empty2, 1, 1)
+    assert dice == 1.0, f"Expected DICE=1.0 for empty volumes, got {dice}"
+    print(f"  ✓ Empty volumes: DICE = {dice:.3f}")
+    
     print("✓ calculate_dice tests passed\n")
 
 

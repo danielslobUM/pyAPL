@@ -45,6 +45,11 @@ def calculate_dice(voi1, voi2, struct_num_1, struct_num_2):
     pixel_data_overlap = voi1_struct & voi2_struct
     
     # Calculate Dice coefficient
-    dice = (2.0 * np.sum(pixel_data_overlap)) / (np.sum(voi1_struct) + np.sum(voi2_struct))
+    summed_vol = np.sum(voi1_struct) + np.sum(voi2_struct)
+    
+    if summed_vol == 0:
+        dice = 1.0  # Both volumes are empty - perfect agreement
+    else:
+        dice = (2.0 * np.sum(pixel_data_overlap)) / summed_vol
     
     return dice
