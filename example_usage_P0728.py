@@ -20,7 +20,9 @@ def example_basic_usage():
     print("="*80)
     
     results = quantify_contour_differences_p0728(
-        dicom_root_folder='/path/to/your/DICOM',  # Update this path
+        # Update this path - should contain patient folders (e.g., P123456789012345/)
+        # See README_P0728.md for expected folder structure
+        dicom_root_folder='/path/to/your/DICOM',
         method1_identifier='method1',              # Update to match your naming
         method2_identifier='method2',              # Update to match your naming
         calc_all_parameters=1                      # Calculate all metrics
@@ -123,17 +125,21 @@ def example_date_based_comparison():
     Example 4: Using date-based folder structure.
     
     If your RTSTRUCT folders are organized by date rather than method identifier,
-    the script will automatically use date-based matching.
+    the script will automatically use date-based matching as a fallback.
+    To explicitly use date-based matching, provide identifiers that won't match
+    your actual folder/file names, and the script will automatically fall back
+    to sorting by date subdirectories.
     """
     print("="*80)
     print("Example 4: Date-based Comparison")
     print("="*80)
     
-    # Use generic identifiers - the script will fall back to date-based matching
+    # Note: Using identifiers that don't match actual folder names triggers
+    # automatic fallback to date-based comparison (earliest vs latest date)
     results = quantify_contour_differences_p0728(
         dicom_root_folder='/path/to/your/DICOM',
-        method1_identifier='doesnotexist',  # Won't match - triggers date fallback
-        method2_identifier='alsonotfound',  # Won't match - triggers date fallback
+        method1_identifier='_no_match_1_',  # Placeholder - triggers date fallback
+        method2_identifier='_no_match_2_',  # Placeholder - triggers date fallback
         calc_all_parameters=1,
         selected_oars=None  # Will prompt
     )

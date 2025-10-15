@@ -20,7 +20,7 @@ This repository contains Python scripts converted from MATLAB for quantifying di
 - PyDICOM
 - scikit-image
 - pandas
-- rdflib (for LinkedDICOM support)
+- rdflib>=6.0.0 (for LinkedDICOM support)
 
 ### Setup
 
