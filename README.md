@@ -20,6 +20,7 @@ This repository contains Python scripts converted from MATLAB for quantifying di
 - PyDICOM
 - scikit-image
 - pandas
+- rdflib>=6.0.0 (for LinkedDICOM support)
 
 ### Setup
 
@@ -36,7 +37,23 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Basic Usage
+### Automated Batch Processing (New!)
+
+For automated processing of entire datasets with standard folder structures:
+
+```bash
+python quantifycontourdifferences_P0728.py /path/to/DICOM method1 method2
+```
+
+This script automatically:
+- Discovers all patient folders in the DICOM directory
+- Finds CT and RTSTRUCT files for each patient
+- Processes all patients in batch
+- Uses LinkedDICOM metadata when available
+
+See [README_P0728.md](README_P0728.md) for detailed documentation and examples.
+
+### Basic Usage (Manual Folder Selection)
 
 Run the main script:
 ```bash
