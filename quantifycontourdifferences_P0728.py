@@ -177,7 +177,7 @@ def find_dicom_files_in_folder(folder_path):
 
 def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='method1', 
                                         method2_identifier='method2', calc_all_parameters=1,
-                                        selected_oars=None):
+                                        selected_oars=None, max_patients=None):
     """
     Quantify differences between contours for all patients using linkeddicom.ttl metadata.
     
@@ -199,6 +199,9 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
         and surface DICE in addition to volumetric DICE. Default = 1.
     selected_oars : list of str, optional
         List of structure names to compare. If None, will prompt user to select.
+    max_patients : int, optional
+        Maximum number of patients to process. If None, all patients will be processed.
+        Use this for sample/test runs. Default is None (process all patients).
         
     Returns
     -------
@@ -223,6 +226,11 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
         return pd.DataFrame()
     
     print(f"Found {len(patients)} patient folder(s)")
+    
+    # Limit number of patients if max_patients is specified
+    if max_patients is not None and max_patients > 0:
+        patients = patients[:max_patients]
+        print(f"Limiting to first {len(patients)} patient(s) for sample test")
     
     # Process each patient
     all_results = []
@@ -460,6 +468,7 @@ if __name__ == '__main__':
     DICOM_ROOT_FOLDER = '/path/to/DICOM'  # Update this path
     METHOD1_IDENTIFIER = 'method1'  # Update to match your folder/file naming
     METHOD2_IDENTIFIER = 'method2'  # Update to match your folder/file naming
+    MAX_PATIENTS = 5  # Limit to 5 patients for sample test (set to None for all patients)
     
     # Parse command-line arguments if provided
     if len(sys.argv) > 1:
@@ -468,13 +477,16 @@ if __name__ == '__main__':
         METHOD1_IDENTIFIER = sys.argv[2]
     if len(sys.argv) > 3:
         METHOD2_IDENTIFIER = sys.argv[3]
+    if len(sys.argv) > 4:
+        MAX_PATIENTS = int(sys.argv[4]) if sys.argv[4].lower() != 'none' else None
     
     print("="*80)
-    print("Quantify Contour Differences - P0728 Dataset")
+    print("Quantify Contour Differences - P0728 Dataset (Sample Test Mode)")
     print("="*80)
     print(f"DICOM Root Folder: {DICOM_ROOT_FOLDER}")
     print(f"Method 1 Identifier: {METHOD1_IDENTIFIER}")
     print(f"Method 2 Identifier: {METHOD2_IDENTIFIER}")
+    print(f"Max Patients: {MAX_PATIENTS if MAX_PATIENTS is not None else 'All'}")
     print("="*80)
     
     # Run analysis
@@ -483,7 +495,8 @@ if __name__ == '__main__':
         method1_identifier=METHOD1_IDENTIFIER,
         method2_identifier=METHOD2_IDENTIFIER,
         calc_all_parameters=1,
-        selected_oars=None  # Will prompt user
+        selected_oars=None,  # Will prompt user
+        max_patients=MAX_PATIENTS
     )
     
     if results is not None and not results.empty:
