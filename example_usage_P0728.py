@@ -14,9 +14,10 @@ def example_basic_usage():
     Example 1: Basic usage with user prompts for OAR selection.
     
     This will prompt the user to select which structures to compare.
+    Processes only first 5 patients for sample testing.
     """
     print("="*80)
-    print("Example 1: Basic Usage")
+    print("Example 1: Basic Usage (Sample Test - 5 Patients)")
     print("="*80)
     
     results = quantify_contour_differences_p0728(
@@ -25,7 +26,8 @@ def example_basic_usage():
         dicom_root_folder='/path/to/your/DICOM',
         method1_identifier='method1',              # Update to match your naming
         method2_identifier='method2',              # Update to match your naming
-        calc_all_parameters=1                      # Calculate all metrics
+        calc_all_parameters=1,                     # Calculate all metrics
+        max_patients=5                             # Limit to 5 patients for sample test
     )
     
     if results is not None and not results.empty:
@@ -42,10 +44,10 @@ def example_preselected_oars():
     Example 2: Batch processing with pre-selected structures.
     
     This avoids user prompts by pre-specifying which structures to compare.
-    Useful for automated pipelines.
+    Useful for automated pipelines. Processes only 5 patients for sample test.
     """
     print("="*80)
-    print("Example 2: Pre-selected OARs")
+    print("Example 2: Pre-selected OARs (Sample Test - 5 Patients)")
     print("="*80)
     
     # Define structures you want to compare
@@ -62,7 +64,8 @@ def example_preselected_oars():
         method1_identifier='manual',               # Update to match your naming
         method2_identifier='automatic',            # Update to match your naming
         calc_all_parameters=1,
-        selected_oars=structures_to_compare        # Pre-select structures
+        selected_oars=structures_to_compare,       # Pre-select structures
+        max_patients=5                             # Limit to 5 patients
     )
     
     if results is not None and not results.empty:
@@ -98,9 +101,10 @@ def example_dice_only():
     Example 3: Calculate only DICE (faster processing).
     
     This skips APL and Surface DSC calculations for faster processing.
+    Processes only 5 patients for sample test.
     """
     print("="*80)
-    print("Example 3: DICE Only (Fast Mode)")
+    print("Example 3: DICE Only (Fast Mode - 5 Patients)")
     print("="*80)
     
     results = quantify_contour_differences_p0728(
@@ -108,7 +112,8 @@ def example_dice_only():
         method1_identifier='v1',
         method2_identifier='v2',
         calc_all_parameters=0,  # Only calculate DICE
-        selected_oars=['Lung_L', 'Lung_R']
+        selected_oars=['Lung_L', 'Lung_R'],
+        max_patients=5          # Limit to 5 patients
     )
     
     if results is not None and not results.empty:
@@ -129,9 +134,10 @@ def example_date_based_comparison():
     To explicitly use date-based matching, provide identifiers that won't match
     your actual folder/file names, and the script will automatically fall back
     to sorting by date subdirectories.
+    Processes only 5 patients for sample test.
     """
     print("="*80)
-    print("Example 4: Date-based Comparison")
+    print("Example 4: Date-based Comparison (5 Patients)")
     print("="*80)
     
     # Note: Using identifiers that don't match actual folder names triggers
@@ -141,7 +147,8 @@ def example_date_based_comparison():
         method1_identifier='_no_match_1_',  # Placeholder - triggers date fallback
         method2_identifier='_no_match_2_',  # Placeholder - triggers date fallback
         calc_all_parameters=1,
-        selected_oars=None  # Will prompt
+        selected_oars=None,  # Will prompt
+        max_patients=5       # Limit to 5 patients
     )
     
     if results is not None and not results.empty:
@@ -158,9 +165,10 @@ def example_custom_analysis():
     Example 5: Custom analysis and filtering of results.
     
     Demonstrates how to filter and analyze results programmatically.
+    Processes only 5 patients for sample test.
     """
     print("="*80)
-    print("Example 5: Custom Analysis")
+    print("Example 5: Custom Analysis (5 Patients)")
     print("="*80)
     
     results = quantify_contour_differences_p0728(
@@ -168,7 +176,8 @@ def example_custom_analysis():
         method1_identifier='method1',
         method2_identifier='method2',
         calc_all_parameters=1,
-        selected_oars=['Lung_L', 'Lung_R', 'Heart', 'Esophagus']
+        selected_oars=['Lung_L', 'Lung_R', 'Heart', 'Esophagus'],
+        max_patients=5  # Limit to 5 patients
     )
     
     if results is not None and not results.empty:

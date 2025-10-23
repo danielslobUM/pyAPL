@@ -40,29 +40,43 @@ The script will prompt you to:
 1. Use the default DICOM root folder or specify a custom path
 2. Select which structures (OARs) to compare
 
+**Note:** By default, the script is configured to process only the first 5 patients as a sample test. To process all patients, modify the `MAX_PATIENTS` variable in the script or use command-line arguments.
+
 ### Usage with Command-Line Arguments
 
 ```bash
-python quantifycontourdifferences_P0728.py /path/to/DICOM method1 method2
+python quantifycontourdifferences_P0728.py /path/to/DICOM method1 method2 5
 ```
 
 Arguments:
 1. Path to DICOM root folder
 2. Method 1 identifier (string that appears in folder/file names)
 3. Method 2 identifier (string that appears in folder/file names)
+4. Maximum number of patients to process (optional, use 'none' for all patients)
 
 ### Python API Usage
 
 ```python
 from quantifycontourdifferences_P0728 import quantify_contour_differences_p0728
 
-# Basic usage
+# Sample test mode - process only 5 patients
 results = quantify_contour_differences_p0728(
     dicom_root_folder='/path/to/DICOM',
     method1_identifier='method1',
     method2_identifier='method2',
     calc_all_parameters=1,  # Calculate DICE, APL, and Surface DSC
-    selected_oars=None      # Will prompt for selection
+    selected_oars=None,     # Will prompt for selection
+    max_patients=5          # Limit to 5 patients
+)
+
+# Process all patients
+results = quantify_contour_differences_p0728(
+    dicom_root_folder='/path/to/DICOM',
+    method1_identifier='method1',
+    method2_identifier='method2',
+    calc_all_parameters=1,
+    selected_oars=None,
+    max_patients=None       # Process all patients
 )
 
 # With pre-selected OARs
@@ -71,7 +85,8 @@ results = quantify_contour_differences_p0728(
     method1_identifier='method1',
     method2_identifier='method2',
     calc_all_parameters=1,
-    selected_oars=['Lung_L', 'Lung_R', 'Heart']  # Pre-select structures
+    selected_oars=['Lung_L', 'Lung_R', 'Heart'],  # Pre-select structures
+    max_patients=5          # Limit to 5 patients
 )
 
 # Results are returned as a pandas DataFrame
