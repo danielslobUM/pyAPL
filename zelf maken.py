@@ -6,8 +6,8 @@ but with MATCHING structure names so they can be compared by quantifyContourDiff
 
 The key difference from the original approach:
 - BOTH files contain a structure named "Test Contour"
-- File 1: Contains a square-shaped contour
-- File 2: Contains a rectangle-shaped contour (same x-dim, 2x y-dim)
+- File 1: Contains a smaller rectangular contour (x = half base, y = base)
+- File 2: Contains a larger rectangular contour (x = half base, y = 2x base)
 
 This allows the MATLAB script to find common VOIs and perform comparisons.
 """
@@ -21,8 +21,8 @@ import os
 
 def create_square_mask(rtstruct: RTStruct) -> NDArray[np.bool_]:
     """
-    Create a simple square contour applied to ALL slices.
-    The square is centered and has equal x and y dimensions.
+    Create a rectangular contour applied to ALL slices.
+    The contour has x-dimension = half of base size and y-dimension = base size.
     """
     if not rtstruct.series_data:
         raise RuntimeError("No DICOM images were loaded from the provided series path.")
@@ -35,13 +35,13 @@ def create_square_mask(rtstruct: RTStruct) -> NDArray[np.bool_]:
     # Initialize empty mask (all False)
     mask: NDArray[np.bool_] = np.zeros((width, height, depth), dtype=bool)
 
-    # Define a centered SQUARE with isotropic dimensions (same X and Y)
+    # Define a centered rectangle with x-dimension = half of base size
     min_dim = min(width, height)
     square_size = max(10, min_dim // 16)  # Base size
-    square_size_x = square_size // 2  # X dimension reduced to half
-    square_size_y = square_size  # Y dimension stays the same
+    square_size_x = square_size // 2  # X dimension: half of base size
+    square_size_y = square_size  # Y dimension: full base size
     
-    # Center the square at isocenter (exact center of image)
+    # Center the contour at isocenter (exact center of image)
     x_center = width // 2
     y_center = height // 2
     x1 = x_center - square_size_x // 2
@@ -49,7 +49,7 @@ def create_square_mask(rtstruct: RTStruct) -> NDArray[np.bool_]:
     y1 = y_center - square_size_y // 2
     y2 = y_center + square_size_y // 2
 
-    # Apply square to ALL slices
+    # Apply contour to ALL slices
     for k in range(depth):
         mask[x1:x2, y1:y2, k] = True
 
@@ -98,8 +98,9 @@ def create_rectangle_mask(rtstruct: RTStruct) -> NDArray[np.bool_]:
 
 def main():
     # Update this path to match your actual DICOM series location
+    # Example: dicom_series_path = "C:\\path\\to\\your\\DICOM\\series\\CT\\Patient001"
     dicom_series_path = (
-        "C:\\Users\\p70078935\\Maastro\\CDS Informatics - Documents\\PersOn\\Daniël\\3rd paper\\Matlab2\\Testset manual\\CT\\P0001C"
+        "C:\\Users\\USERNAME\\Path\\To\\DICOM\\CT\\P0001C"
     )
     
     print(f"Looking for DICOM series at: {dicom_series_path}")
@@ -112,7 +113,7 @@ def main():
     # Both files will have a structure named "Test Contour" but with different geometries
     structure_name = "Test Contour"
     
-    # Create RTStruct file 1 with square contour
+    # Create RTStruct file 1 with smaller rectangular contour
     # This represents "method 1" or "reference" contour
     rtstruct1 = RTStructBuilder.create_new(dicom_series_path=dicom_series_path)
     square_mask = create_square_mask(rtstruct1)
@@ -120,10 +121,10 @@ def main():
     
     output_path1 = "RTStructfile1_allslices_synth"
     rtstruct1.save(output_path1)
-    print(f"Saved RTStruct file 1 (Square) to: {os.path.abspath(output_path1 if output_path1.endswith('.dcm') else output_path1 + '.dcm')}")
+    print(f"Saved RTStruct file 1 (Smaller Rectangle) to: {os.path.abspath(output_path1 if output_path1.endswith('.dcm') else output_path1 + '.dcm')}")
     print(f"  Structure name: '{structure_name}'")
 
-    # Create RTStruct file 2 with rectangle contour (same x-dim, 2x y-dim)
+    # Create RTStruct file 2 with larger rectangular contour (same x-dim, 2x y-dim)
     # This represents "method 2" or "comparison" contour
     rtstruct2 = RTStructBuilder.create_new(dicom_series_path=dicom_series_path)
     rectangle_mask = create_rectangle_mask(rtstruct2)
@@ -131,7 +132,7 @@ def main():
     
     output_path2 = "RTStructfile2_allslices_synth"
     rtstruct2.save(output_path2)
-    print(f"Saved RTStruct file 2 (Rectangle) to: {os.path.abspath(output_path2 if output_path2.endswith('.dcm') else output_path2 + '.dcm')}")
+    print(f"Saved RTStruct file 2 (Larger Rectangle) to: {os.path.abspath(output_path2 if output_path2.endswith('.dcm') else output_path2 + '.dcm')}")
     print(f"  Structure name: '{structure_name}'")
     
     print("\n" + "="*80)
@@ -140,8 +141,8 @@ def main():
     print(f"\nBoth RTSTRUCT files have been created with matching structure name: '{structure_name}'")
     print("This allows quantifyContourDifferences.m to find common VOIs and perform comparisons.")
     print("\nThe two files contain geometrically different contours:")
-    print("  - File 1: Square-shaped contour")
-    print("  - File 2: Rectangle-shaped contour (same x-dim, 2x y-dim)")
+    print("  - File 1: Smaller rectangular contour (x = half base, y = base)")
+    print("  - File 2: Larger rectangular contour (x = half base, y = 2x base)")
     print("\nYou can now use these files with the MATLAB quantifyContourDifferences.m script.")
 
 
