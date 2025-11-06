@@ -3,7 +3,7 @@ Test the corrected resample_contour_slices implementation.
 """
 
 import numpy as np
-from resample_contour_slices_corrected import resample_contour_slices
+from resample_contour_slices import resample_contour_slices
 
 
 def test_basic_functionality():
@@ -130,6 +130,42 @@ def test_multiple_slices():
     print("✓ Multiple slices test passed")
 
 
+def test_all_points_filtered():
+    """Test when all points are filtered out as invalid."""
+    print("Testing all points filtered case...")
+    
+    ct = {
+        'PixelFirstXi': 0.0,
+        'PixelFirstYi': 0.0,
+        'PixelFirstZi': 0.0,
+        'PixelSpacingXi': 1.0,
+        'PixelSpacingYi': 1.0,
+        'PixelSpacingZi': 1.0,
+        'PixelNumXi': 10,
+        'PixelNumYi': 10,
+        'PixelNumZi': 10,
+        'Image': np.zeros((10, 10, 10))
+    }
+    
+    # Create contour with all points way outside the grid (> 5 pixels)
+    rts_cs = [
+        {
+            'X': [-100.0, -100.0, -100.0],
+            'Y': [-100.0, -100.0, -100.0],
+            'Z': [-100.0, -100.0, -100.0]
+        }
+    ]
+    
+    # Should handle gracefully and return empty volume
+    rts_vol, minmax = resample_contour_slices(rts_cs, ct, 'invalid_structure')
+    
+    # Volume should be empty
+    assert np.sum(rts_vol) == 0, "Volume should be empty when all points filtered"
+    assert rts_vol.shape == (10, 10, 10), "Volume shape should still be correct"
+    
+    print("✓ All points filtered test passed")
+
+
 def test_outside_grid():
     """Test handling of points outside the grid."""
     print("Testing outside grid handling...")
@@ -201,6 +237,8 @@ if __name__ == '__main__':
     test_empty_contour()
     print()
     test_multiple_slices()
+    print()
+    test_all_points_filtered()
     print()
     test_outside_grid()
     print()

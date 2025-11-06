@@ -10,7 +10,6 @@ Jose A. Baeza & Femke Vaassen @ MAASTRO
 """
 
 import numpy as np
-from scipy.interpolate import interp1d
 
 
 def resample_contour_slices(rts_cs, ct, st_name):
@@ -106,6 +105,16 @@ def resample_contour_slices(rts_cs, ct, st_name):
     
     # MATLAB: RTS_cs_grid = RTS_cs_grid(~non_valid,:)
     rts_cs_grid = rts_cs_grid[~non_valid, :]
+    
+    # Check if we have any valid points left
+    if len(rts_cs_grid) == 0:
+        # No valid points after filtering - return empty volume
+        if 'Image' in ct and hasattr(ct['Image'], 'shape'):
+            rts_vol = np.zeros(ct['Image'].shape)
+        else:
+            rts_vol = np.zeros((ct['PixelNumXi'], ct['PixelNumYi'], ct['PixelNumZi']))
+        minmax = {'minX': 1, 'maxX': 1, 'minZ': 1, 'maxZ': 1}
+        return rts_vol, minmax
     
     # Sometimes the RTSTRUCT is outside the CT grid (i.e. in BODY).
     # Pixels are forced to be between [1...PixelNum]
