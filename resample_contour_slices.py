@@ -4,12 +4,13 @@ resampleContourSlices - Resample contour using RTSTRUCT coordinates and CT
 The coordinates are upsampled to prevent open contours and then used to
 create a binary image of the contour.
 
+This version closely matches the MATLAB implementation in resampleContourSlices.m
+
 Jose A. Baeza & Femke Vaassen @ MAASTRO
 """
 
 import numpy as np
 from scipy.interpolate import interp1d
-from skimage.draw import polygon
 
 
 def resample_contour_slices(rts_cs, ct, st_name):
@@ -21,7 +22,11 @@ def resample_contour_slices(rts_cs, ct, st_name):
     rts_cs : list of dict
         ContourSequence values (slices) with 'X', 'Y', 'Z' keys
     ct : dict
-        CT information dictionary
+        CT information dictionary with keys:
+        - Image : ndarray or shape info
+        - PixelFirstXi, PixelFirstYi, PixelFirstZi : float
+        - PixelSpacingXi, PixelSpacingYi, PixelSpacingZi : float
+        - PixelNumXi, PixelNumYi, PixelNumZi : int
     st_name : str
         Structure name
         
@@ -36,84 +41,129 @@ def resample_contour_slices(rts_cs, ct, st_name):
         - minZ : int
         - maxZ : int
     """
-    # Upsample the ContourSequence values to prevent open contours
+    # Upsampling the ContourSequence values to prevent open contours and
+    # regrouping them in one single matrix for performance.
     rts_cs_aux = []
+    
     for i in range(len(rts_cs)):
+        # Check if slice has contour points (matching MATLAB's ~isempty check)
         if rts_cs[i]['X'] is not None and len(rts_cs[i]['X']) > 0:
-            current_sampling = np.arange(len(rts_cs[i]['X']))
-            new_sampling = np.arange(0, len(rts_cs[i]['X']), 0.1)
+            # MATLAB: current_sampling = 1:length(RTS_cs(i).X)
+            # MATLAB is 1-indexed, so 1:N means indices 1,2,3,...,N
+            # In Python (0-indexed), we use 0:N-1, which is 0,1,2,...,N-1
+            # But for interpolation, we need the same range [0, N-1] to [0, N-1]
+            current_sampling = np.arange(1, len(rts_cs[i]['X']) + 1)
+            
+            # MATLAB: new_sampling = 1:0.1:length(RTS_cs(i).X)
+            # This creates [1, 1.1, 1.2, ..., N]
+            # We need to match this exactly
+            new_sampling = np.arange(1, len(rts_cs[i]['X']) + 1, 0.1)
             
             # Interpolate X, Y, Z coordinates
-            f_x = interp1d(current_sampling, rts_cs[i]['X'], kind='linear')
-            f_y = interp1d(current_sampling, rts_cs[i]['Y'], kind='linear')
-            f_z = interp1d(current_sampling, rts_cs[i]['Z'], kind='linear')
+            # MATLAB's interp1 with default 'linear' method
+            rts_cs_upsamp_x = np.interp(new_sampling, current_sampling, rts_cs[i]['X'])
+            rts_cs_upsamp_y = np.interp(new_sampling, current_sampling, rts_cs[i]['Y'])
+            rts_cs_upsamp_z = np.interp(new_sampling, current_sampling, rts_cs[i]['Z'])
             
-            rts_cs_upsamp_x = f_x(new_sampling)
-            rts_cs_upsamp_y = f_y(new_sampling)
-            rts_cs_upsamp_z = f_z(new_sampling)
-            
-            # Stack and append
+            # MATLAB: vertcat(RTS_cs_aux, [RTS_cs_upsamp_X' RTS_cs_upsamp_Y' RTS_cs_upsamp_Z'])
+            # Stack as columns and append to list
             upsampled = np.column_stack([rts_cs_upsamp_x, rts_cs_upsamp_y, rts_cs_upsamp_z])
             rts_cs_aux.append(upsampled)
     
-    if not rts_cs_aux:
-        # Return empty volume and default minmax
-        rts_vol = np.zeros((ct['PixelNumXi'], ct['PixelNumYi'], ct['PixelNumZi']), dtype=bool)
-        minmax = {'minX': 0, 'maxX': 0, 'minZ': 0, 'maxZ': 0}
+    # Concatenate all upsampled contours
+    # MATLAB starts with empty array and uses vertcat
+    if len(rts_cs_aux) == 0:
+        # No valid contours - return empty volume
+        # MATLAB would continue with empty array, but we should handle this
+        if 'Image' in ct and hasattr(ct['Image'], 'shape'):
+            rts_vol = np.zeros(ct['Image'].shape)
+        else:
+            rts_vol = np.zeros((ct['PixelNumXi'], ct['PixelNumYi'], ct['PixelNumZi']))
+        minmax = {'minX': 1, 'maxX': 1, 'minZ': 1, 'maxZ': 1}
         return rts_vol, minmax
     
-    # Concatenate all upsampled contours
     rts_cs_aux = np.vstack(rts_cs_aux)
     
-    # Convert spatial positions to pixel values
+    # Convert spatial positions in pixel values
+    # MATLAB: round((RTS_cs_aux(:,1)-CT.PixelFirstXi)./CT.PixelSpacingXi)+1
+    # The +1 converts from 0-based to 1-based indexing (MATLAB convention)
     rts_cs_grid = np.zeros((len(rts_cs_aux), 3), dtype=int)
-    rts_cs_grid[:, 0] = np.round((rts_cs_aux[:, 0] - ct['PixelFirstXi']) / ct['PixelSpacingXi']).astype(int)
-    rts_cs_grid[:, 1] = np.round((rts_cs_aux[:, 1] - ct['PixelFirstYi']) / ct['PixelSpacingYi']).astype(int)
-    rts_cs_grid[:, 2] = np.round((rts_cs_aux[:, 2] - ct['PixelFirstZi']) / ct['PixelSpacingZi']).astype(int)
+    rts_cs_grid[:, 0] = np.round((rts_cs_aux[:, 0] - ct['PixelFirstXi']) / ct['PixelSpacingXi']).astype(int) + 1
+    rts_cs_grid[:, 1] = np.round((rts_cs_aux[:, 1] - ct['PixelFirstYi']) / ct['PixelSpacingYi']).astype(int) + 1
+    rts_cs_grid[:, 2] = np.round((rts_cs_aux[:, 2] - ct['PixelFirstZi']) / ct['PixelSpacingZi']).astype(int) + 1
     
-    # Check if points are outside the grid
-    if (np.any(rts_cs_grid < 0) or 
-        np.any(rts_cs_grid[:, 0] > ct['PixelNumXi'] - 1) or
-        np.any(rts_cs_grid[:, 1] > ct['PixelNumYi'] - 1) or
-        np.any(rts_cs_grid[:, 2] > ct['PixelNumZi'] - 1)):
+    # It may occur that RTSTRUCTs are far off the GRID. This is probably due to
+    # an error, then pixels are considered invalid
+    outside_grid_limit = 5  # in pixels
+    
+    # MATLAB: non_valid = (RTS_cs_grid(:,1)<-outside_grid_limit) | ...
+    non_valid = ((rts_cs_grid[:, 0] < -outside_grid_limit) | 
+                 (rts_cs_grid[:, 1] < -outside_grid_limit) | 
+                 (rts_cs_grid[:, 2] < -outside_grid_limit) |
+                 (rts_cs_grid[:, 0] > ct['PixelNumXi'] + outside_grid_limit) |
+                 (rts_cs_grid[:, 1] > ct['PixelNumYi'] + outside_grid_limit) |
+                 (rts_cs_grid[:, 2] > ct['PixelNumZi'] + outside_grid_limit))
+    
+    # MATLAB: RTS_cs_grid = RTS_cs_grid(~non_valid,:)
+    rts_cs_grid = rts_cs_grid[~non_valid, :]
+    
+    # Sometimes the RTSTRUCT is outside the CT grid (i.e. in BODY).
+    # Pixels are forced to be between [1...PixelNum]
+    # MATLAB: if (min(RTS_cs_grid(:))<1) | (max(RTS_cs_grid(:,1)) > (CT.PixelNumXi-1)) | ...
+    if (np.min(rts_cs_grid) < 1 or 
+        np.max(rts_cs_grid[:, 0]) > (ct['PixelNumXi'] - 1) or
+        np.max(rts_cs_grid[:, 1]) > (ct['PixelNumYi'] - 1) or
+        np.max(rts_cs_grid[:, 2]) > (ct['PixelNumZi'] - 1)):
         
-        # Clip values to valid range
-        rts_cs_grid[rts_cs_grid < 0] = 0
-        rts_cs_grid[rts_cs_grid[:, 0] > ct['PixelNumXi'] - 1, 0] = ct['PixelNumXi'] - 1
-        rts_cs_grid[rts_cs_grid[:, 1] > ct['PixelNumYi'] - 1, 1] = ct['PixelNumYi'] - 1
-        rts_cs_grid[rts_cs_grid[:, 2] > ct['PixelNumZi'] - 1, 2] = ct['PixelNumZi'] - 1
+        # MATLAB: RTS_cs_grid(RTS_cs_grid<1) = 1
+        rts_cs_grid[rts_cs_grid < 1] = 1
         
+        # MATLAB: RTS_cs_grid(RTS_cs_grid(:,1)>(CT.PixelNumXi-1),1) = CT.PixelNumXi-1
+        rts_cs_grid[rts_cs_grid[:, 0] > (ct['PixelNumXi'] - 1), 0] = ct['PixelNumXi'] - 1
+        rts_cs_grid[rts_cs_grid[:, 1] > (ct['PixelNumYi'] - 1), 1] = ct['PixelNumYi'] - 1
+        rts_cs_grid[rts_cs_grid[:, 2] > (ct['PixelNumZi'] - 1), 2] = ct['PixelNumZi'] - 1
+        
+        # MATLAB: fprintf(['\n PAS OP! RTSTRUCT "', st_name, '" includes points outside the current GRID \n'])
         print(f'\n PAS OP! RTSTRUCT "{st_name}" includes points outside the current GRID \n')
     
-    # Calculate min/max values
+    # MATLAB: minmax.minX = min(RTS_cs_grid(:,1))
     minmax = {
-        'minX': np.min(rts_cs_grid[:, 0]),
-        'maxX': np.max(rts_cs_grid[:, 0]),
-        'minZ': np.min(rts_cs_grid[:, 2]),
-        'maxZ': np.max(rts_cs_grid[:, 2])
+        'minX': int(np.min(rts_cs_grid[:, 0])),
+        'maxX': int(np.max(rts_cs_grid[:, 0])),
+        'minZ': int(np.min(rts_cs_grid[:, 2])),
+        'maxZ': int(np.max(rts_cs_grid[:, 2]))
     }
     
-    # Create binary volume
-    rts_vol = np.zeros((ct['PixelNumXi'], ct['PixelNumYi'], ct['PixelNumZi']), dtype=bool)
+    # Generate a zero-filled VOI and set the 1's at the boundary of the contour
+    # MATLAB: RTS_cs_grid_idxs = sub2ind(size(CT.Image), RTS_cs_grid(:,1), RTS_cs_grid(:,2), RTS_cs_grid(:,3))
+    # MATLAB: RTS_vol = zeros(size(CT.Image))
+    # MATLAB: RTS_vol(RTS_cs_grid_idxs) = 1
     
-    # Group points by Y slice
-    unique_y = np.unique(rts_cs_grid[:, 1])
-    for y_slice in unique_y:
-        slice_points = rts_cs_grid[rts_cs_grid[:, 1] == y_slice]
-        
-        if len(slice_points) > 2:
-            # Use polygon to fill the contour
-            x_coords = slice_points[:, 0]
-            z_coords = slice_points[:, 2]
-            
-            try:
-                rr, cc = polygon(x_coords, z_coords, shape=(ct['PixelNumXi'], ct['PixelNumZi']))
-                rts_vol[rr, y_slice, cc] = True
-            except:
-                # If polygon fails, just mark the boundary points
-                for point in slice_points:
-                    if (0 <= point[0] < ct['PixelNumXi'] and 
-                        0 <= point[2] < ct['PixelNumZi']):
-                        rts_vol[point[0], point[1], point[2]] = True
+    # Get the shape of CT.Image
+    if 'Image' in ct and hasattr(ct['Image'], 'shape'):
+        vol_shape = ct['Image'].shape
+    else:
+        vol_shape = (ct['PixelNumXi'], ct['PixelNumYi'], ct['PixelNumZi'])
+    
+    rts_vol = np.zeros(vol_shape)
+    
+    # Convert MATLAB 1-based indices to Python 0-based indices for sub2ind equivalent
+    # MATLAB sub2ind with 1-based indexing: sub2ind(size, row, col, page)
+    # Python equivalent with 0-based indexing: np.ravel_multi_index((row-1, col-1, page-1), shape)
+    # Since MATLAB indices are 1-based, we subtract 1
+    rts_cs_grid_0based = rts_cs_grid - 1
+    
+    # Use ravel_multi_index to convert subscripts to linear indices
+    # This is the Python equivalent of MATLAB's sub2ind
+    try:
+        rts_cs_grid_idxs = np.ravel_multi_index(
+            (rts_cs_grid_0based[:, 0], rts_cs_grid_0based[:, 1], rts_cs_grid_0based[:, 2]),
+            vol_shape
+        )
+        # Set the boundary points to 1
+        rts_vol.flat[rts_cs_grid_idxs] = 1
+    except ValueError as e:
+        # If there's still an indexing error, print warning
+        print(f"Warning: Could not set some contour points for {st_name}: {e}")
     
     return rts_vol, minmax
