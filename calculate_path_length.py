@@ -75,7 +75,7 @@ def calculate_path_length(image, struct_ref, struct_new, struct_num_1, struct_nu
     
     # Calculate distance transform with proper spacing
     spacing = [image['PixelSpacingZi'], image['PixelSpacingYi'], image['PixelSpacingXi']]
-    distance_c1 = distance_transform_edt(~contour1_zyx, sampling=spacing)
+    distance_c1 = distance_transform_edt(~contour1_zyx.astype(bool), sampling=spacing)
     
     # Create tolerance-expanded contour1
     contour1_tol = distance_c1 <= tolerance

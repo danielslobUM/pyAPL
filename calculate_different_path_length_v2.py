@@ -74,7 +74,7 @@ def calculate_different_path_length_v2(ct, struct_ref, struct_new, struct_num_1,
     
     # Calculate distance transform with proper spacing
     spacing = [ct['PixelSpacingZi'], ct['PixelSpacingYi'], ct['PixelSpacingXi']]
-    distance_c1 = distance_transform_edt(~contour1_zyx, sampling=spacing)
+    distance_c1 = distance_transform_edt(~contour1_zyx.astype(bool), sampling=spacing)
     
     # Ensure tolerance is array
     if not isinstance(tolerance, (list, np.ndarray)):
