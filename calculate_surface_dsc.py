@@ -76,8 +76,8 @@ def calculate_surface_dsc(ct, struct_ref, struct_new, struct_num_1, struct_num_2
     # Calculate distance transforms with proper spacing
     # Spacing order: (Z, Y, X) matching the transposed array
     spacing = [ct['PixelSpacingZi'], ct['PixelSpacingYi'], ct['PixelSpacingXi']]
-    distance_c1 = distance_transform_edt(~contour1_zyx, sampling=spacing)
-    distance_c2 = distance_transform_edt(~contour2_zyx, sampling=spacing)
+    distance_c1 = distance_transform_edt(~contour1_zyx.astype(bool), sampling=spacing)
+    distance_c2 = distance_transform_edt(~contour2_zyx.astype(bool), sampling=spacing)
     
     # Calculate surface DSC for each tolerance
     surface_dsc = np.zeros(len(tolerance))
@@ -88,8 +88,8 @@ def calculate_surface_dsc(ct, struct_ref, struct_new, struct_num_1, struct_num_2
         diff2 = distance_c2 <= tol
         
         # Calculate overlapping pixels
-        pixel_data_overlap1 = contour1_zyx & diff2
-        pixel_data_overlap2 = contour2_zyx & diff1
+        pixel_data_overlap1 = contour1_zyx.astype(bool) & diff2
+        pixel_data_overlap2 = contour2_zyx.astype(bool) & diff1
         
         c1b2 = np.sum(pixel_data_overlap1)
         c2b1 = np.sum(pixel_data_overlap2)
