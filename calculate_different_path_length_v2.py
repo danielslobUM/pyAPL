@@ -111,11 +111,11 @@ def calculate_different_path_length_v2(ct, struct_ref, struct_new, struct_num_1,
             # Check for slices with missing contours
             if tol_idx == 0:  # Only display for first tolerance
                 if np.sum(slice_contour1) == 0 and np.sum(slice_contour2) != 0:
-                    print(f'    -- Slice {ii} contains a GT contour but no automatic contour: '
-                          'all pixels are added to total')
-                
-                if np.sum(slice_contour1) != 0 and np.sum(slice_contour2) == 0:
                     print(f'    -- Slice {ii} contains no GT contour but does contain an '
                           'automatic contour')
+                
+                if np.sum(slice_contour1) != 0 and np.sum(slice_contour2) == 0:
+                    print(f'    -- Slice {ii} contains a GT contour but no automatic contour: '
+                          'all pixels are added to total')
     
     return path_length_outside
