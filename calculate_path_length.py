@@ -100,10 +100,10 @@ def calculate_path_length(image, struct_ref, struct_new, struct_num_1, struct_nu
         
         # Check for slices with missing contours
         if np.sum(slice_contour1) == 0 and np.sum(slice_contour2) != 0:
-            print(f'    -- Slice {ii} contains a GT contour but no automatic contour: '
-                  'all pixels are added to total')
+            print(f'    -- Slice {ii} contains no GT contour but does contain an automatic contour')
         
         if np.sum(slice_contour1) != 0 and np.sum(slice_contour2) == 0:
-            print(f'    -- Slice {ii} contains no GT contour but does contain an automatic contour')
+            print(f'    -- Slice {ii} contains a GT contour but no automatic contour: '
+                  'all pixels are added to total')
     
     return path_length_outside
