@@ -1,0 +1,48 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX ldcm: <https://johanvansoest.nl/ontologies/LinkedDicom/>
+PREFIX schema: <http://schema.org/>
+
+SELECT DISTINCT ?patient ?ctSerie ?ctSeriePath ?rtStruct ?rtStructPath ?structureName
+WHERE {
+?patient rdf:type ldcm:Patient;
+ldcm:T00100020 ?patientId;
+ldcm:has_study ?study.
+?study ldcm:has_series ?seriesStruct.
+
+?seriesStruct rdf:type ldcm:Series;
+              ldcm:T00080060 "RTSTRUCT";
+			  ldcm:has_image ?rtStruct.
+
+?rtStruct schema:contentUrl ?rtStructPath.
+
+?rtStruct rdf:type ldcm:Radiotherapy_Structure_Object;
+    ldcm:T30060010 [
+    	rdf:type ldcm:Referenced_Frame_of_Reference_Sequence;
+        ldcm:has_sequence_item [
+    		rdf:type ldcm:Referenced_Frame_of_Reference_Sequence_Item;
+            ldcm:T30060012 [
+				rdf:type ldcm:Radiotherapy_Referenced_Study_Sequence;
+ 				ldcm:has_sequence_item [
+    				rdf:type ldcm:Radiotherapy_Referenced_Study_Sequence_Item;
+    			    ldcm:T30060014 [
+    					rdf:type ldcm:Radiotherapy_Referenced_Series_Sequence;
+         				ldcm:has_sequence_item [
+    						rdf:type ldcm:Radiotherapy_Referenced_Series_Sequence_Item;
+          					ldcm:R0020000E ?ctSerie;
+						];
+					];
+				];
+        	];
+		];
+	];
+	ldcm:T30060020 [
+        rdf:type ldcm:Structure_Set_ROI_Sequence;
+        ldcm:has_sequence_item [
+    		rdf:type ldcm:Structure_Set_ROI_Sequence_Item;
+            ldcm:T30060026 ?structureName;
+        ];
+    ].
+?ctSerie ldcm:has_image ?ctSeriesSlice.
+?ctSeriesSlice schema:contentUrl ?ctSeriesSlicepath.
+BIND(REPLACE(STR(?ctSeriesSlicepath), "\\/[0-9|\\.]*\\.dcm", "") AS ?ctSeriePath)
+}
