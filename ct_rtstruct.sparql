@@ -1,0 +1,19 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX dicom: <http://purl.org/healthcarevocab/v1#>
+
+SELECT ?ctSerie ?ctSeriePath ?rtStruct ?rtStructPath ?structureName
+WHERE {
+    # Find CT Series
+    ?ctSerie rdf:type dicom:CTSeries .
+    ?ctSerie dicom:hasSeriePath ?ctSeriePath .
+    
+    # Find RTSTRUCT linked to the CT Series
+    ?rtStruct rdf:type dicom:RTStruct .
+    ?rtStruct dicom:referencesSeriesInstanceUID ?ctSerie .
+    ?rtStruct dicom:hasFilePath ?rtStructPath .
+    
+    # Find structure names in the RTSTRUCT
+    ?rtStruct dicom:hasStructure ?structure .
+    ?structure dicom:structureName ?structureName .
+}
