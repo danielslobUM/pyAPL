@@ -298,12 +298,39 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             elif method2_identifier.lower() in rt_path_lower:
                 rtstruct2_path = rt_path
         
+        # If method identifiers not found, use fallback approach with available RTSTRUCTs
+        if not rtstruct1_path or not rtstruct2_path:
+            print(f"  Warning: Could not identify RTSTRUCT files by method identifier.")
+            print(f"  Using fallback: selecting from available RTSTRUCTs linked to CT series...")
+            
+            # Get all RTSTRUCT paths from the linked RTSTRUCTs
+            available_rtstructs = [(rt_uid, rt_data['path']) for rt_uid, rt_data in ct_data['RTSTRUCT'].items()]
+            
+            if len(available_rtstructs) < 2:
+                print(f"  Warning: Found only {len(available_rtstructs)} RTSTRUCT(s) linked to CT series.")
+                print(f"  Need at least 2 RTSTRUCTs for comparison. Skipping patient.")
+                continue
+            
+            # Sort RTSTRUCTs by path (which often includes date) to get consistent ordering
+            available_rtstructs.sort(key=lambda x: x[1])
+            
+            # Assign first and second as method 1 and method 2
+            if not rtstruct1_path:
+                rtstruct1_path = available_rtstructs[0][1]
+                print(f"  Using as method 1: {os.path.basename(os.path.dirname(rtstruct1_path))}/{os.path.basename(rtstruct1_path)}")
+            
+            if not rtstruct2_path:
+                # Use the last one if we have method1, or the second one if we don't have method1
+                idx = -1 if rtstruct1_path else 1
+                rtstruct2_path = available_rtstructs[idx][1]
+                print(f"  Using as method 2: {os.path.basename(os.path.dirname(rtstruct2_path))}/{os.path.basename(rtstruct2_path)}")
+        
         if not rtstruct1_path:
-            print(f"  Warning: No RTSTRUCT file found for method 1 (identifier: {method1_identifier})")
+            print(f"  Warning: No RTSTRUCT file found for method 1")
             continue
         
         if not rtstruct2_path:
-            print(f"  Warning: No RTSTRUCT file found for method 2 (identifier: {method2_identifier})")
+            print(f"  Warning: No RTSTRUCT file found for method 2")
             continue
         
         print(f"  Method 1 RTSTRUCT: {rtstruct1_path}")
