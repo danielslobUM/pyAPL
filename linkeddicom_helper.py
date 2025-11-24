@@ -47,7 +47,7 @@ def get_structs_for_ct(patient_folder):
     ttl_file = os.path.join(patient_folder, 'linkeddicom.ttl')
     
     if not os.path.exists(ttl_file):
-        warnings.warn(f"LinkedDICOM TTL file not found: {ttl_file}")
+        warnings.warn(f"LinkedDICOM TTL file not found: {ttl_file}", UserWarning, stacklevel=2)
         return {}
     
     try:
@@ -137,11 +137,12 @@ def get_structs_for_ct(patient_folder):
                                 # Read DICOM file - use force=True only if initial read fails
                                 try:
                                     ds = pydicom.dcmread(rtstruct_path)
-                                except (InvalidDicomError, KeyError, ValueError) as e:
+                                except InvalidDicomError as e:
                                     # Fallback to force=True for non-standard DICOM files
-                                    # Only catch specific DICOM parsing errors
+                                    # Only catch InvalidDicomError - let other errors propagate
                                     ds = pydicom.dcmread(rtstruct_path, force=True)
-                                    warnings.warn(f"Used force=True to read non-standard DICOM file {rtstruct_path}: {str(e)}")
+                                    warnings.warn(f"Used force=True to read non-standard DICOM file {rtstruct_path}: {str(e)}", 
+                                                UserWarning, stacklevel=2)
                                 
                                 # Get structure names
                                 if hasattr(ds, 'StructureSetROISequence'):
