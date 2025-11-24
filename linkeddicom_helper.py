@@ -9,7 +9,6 @@ import os
 import warnings
 from rdflib import Graph, Namespace, RDF, RDFS, URIRef
 import pydicom
-from pydicom.errors import InvalidDicomError
 
 
 def get_structs_for_ct(patient_folder):
@@ -47,7 +46,7 @@ def get_structs_for_ct(patient_folder):
     ttl_file = os.path.join(patient_folder, 'linkeddicom.ttl')
     
     if not os.path.exists(ttl_file):
-        warnings.warn(f"LinkedDICOM TTL file not found: {ttl_file}", UserWarning, stacklevel=2)
+        warnings.warn(f"LinkedDICOM TTL file not found: {ttl_file}")
         return {}
     
     try:
@@ -104,7 +103,7 @@ def get_structs_for_ct(patient_folder):
         # RTSTRUCT SOP Class UID: 1.2.840.10008.5.1.4.1.1.481.3
         for subject in g.subjects(RDF.type, None):
             types = list(g.objects(subject, RDF.type))
-            type_strings = [str(t).lower() for t in types]
+            type_strings = [str(t).lower() for ts in types for t in [ts]]
             
             is_rtstruct = any('rtstruct' in ts for ts in type_strings) or \
                          any('rtstructureset' in ts.replace(' ', '') for ts in type_strings)
@@ -134,15 +133,7 @@ def get_structs_for_ct(patient_folder):
                         
                         try:
                             if os.path.exists(rtstruct_path):
-                                # Read DICOM file - use force=True only if initial read fails
-                                try:
-                                    ds = pydicom.dcmread(rtstruct_path)
-                                except InvalidDicomError as e:
-                                    # Fallback to force=True for non-standard DICOM files
-                                    # Only catch InvalidDicomError - let other errors propagate
-                                    ds = pydicom.dcmread(rtstruct_path, force=True)
-                                    warnings.warn(f"Used force=True to read non-standard DICOM file {rtstruct_path}: {str(e)}", 
-                                                UserWarning, stacklevel=2)
+                                ds = pydicom.dcmread(rtstruct_path, force=True)
                                 
                                 # Get structure names
                                 if hasattr(ds, 'StructureSetROISequence'):
@@ -157,10 +148,8 @@ def get_structs_for_ct(patient_folder):
                                                     for ref_series in ref_study.RTReferencedSeriesSequence:
                                                         if hasattr(ref_series, 'SeriesInstanceUID'):
                                                             referenced_series.append(ref_series.SeriesInstanceUID)
-                        except (IOError, OSError) as e:
-                            warnings.warn(f"Could not access RTSTRUCT file {rtstruct_path}: {str(e)}")
                         except Exception as e:
-                            warnings.warn(f"Error reading RTSTRUCT file {rtstruct_path}: {str(e)}")
+                            warnings.warn(f"Could not read RTSTRUCT file {rtstruct_path}: {str(e)}")
                         
                         # Link RTSTRUCT to all referenced CT series
                         if referenced_series:
@@ -177,15 +166,7 @@ def get_structs_for_ct(patient_folder):
                                         }
                         else:
                             # If we couldn't determine referenced series, link to all CT series as fallback
-                            # This is a conservative approach to ensure RTSTRUCTs are not lost
-                            # WARNING: This may create incorrect associations
-                            warnings.warn(
-                                f"Could not determine referenced CT series for RTSTRUCT {rtstruct_path}. "
-                                f"Linking to all available CT series as fallback. "
-                                f"This may result in incorrect CT-RTSTRUCT associations.",
-                                UserWarning,
-                                stacklevel=2
-                            )
+                            # This ensures RTSTRUCTs are not lost
                             for ct_uid, ct_data in ct_series_dict.items():
                                 ct_data['RTSTRUCT'][rtstruct_uid] = {
                                     'UID': rtstruct_uid,
