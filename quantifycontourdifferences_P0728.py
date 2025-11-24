@@ -21,6 +21,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from rdflib import Graph, Namespace, URIRef
+from linkeddicom_helper import get_structs_for_ct
 from read_dicomct_light import read_dicomct_light
 from read_dicomrtstruct import read_dicomrtstruct
 from compose_struct_matrix import compose_struct_matrix
@@ -242,21 +243,30 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
         print(f"Processing patient {patient_idx + 1}/{len(patients)}: {patient_id}")
         print(f"{'='*80}")
         
-        # Check if patient has required folders
-        if not patient_data['ct_folder']:
-            print(f"  Warning: No CT folder found for patient {patient_id}")
+        # Use linkeddicom_helper to get CT series and linked RTSTRUCTs
+        print("  Using LinkedDICOM metadata to find CT and RTSTRUCT files...")
+        try:
+            ct_series_dict = get_structs_for_ct(patient_data['patient_folder'])
+        except Exception as e:
+            print(f"  Error reading LinkedDICOM metadata: {str(e)}")
             continue
         
-        if not patient_data['rtstruct_folder']:
-            print(f"  Warning: No RTSTRUCT folder found for patient {patient_id}")
+        if not ct_series_dict:
+            print(f"  Warning: No CT series found in LinkedDICOM metadata")
             continue
         
-        # Find CT files
-        print("  Searching for CT files...")
-        ct_files = find_dicom_files_in_folder(patient_data['ct_folder'])
+        # Get the first CT series (could be extended to process multiple CT series)
+        ct_series_uid = list(ct_series_dict.keys())[0]
+        ct_data = ct_series_dict[ct_series_uid]
+        
+        print(f"  Found CT series: {ct_series_uid}")
+        print(f"  CT path: {ct_data['path']}")
+        
+        # Find CT files in the CT series path
+        ct_files = find_dicom_files_in_folder(ct_data['path'])
         
         if not ct_files:
-            print(f"  Warning: No CT DICOM files found for patient {patient_id}")
+            print(f"  Warning: No CT DICOM files found in {ct_data['path']}")
             continue
         
         print(f"  Found {len(ct_files)} CT file(s)")
@@ -269,83 +279,38 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             print(f"  Error reading CT data: {str(e)}")
             continue
         
-        # Find RTSTRUCT files for both methods
+        # Find RTSTRUCT files for both methods from the LinkedDICOM data
         print("  Searching for RTSTRUCT files...")
-        rtstruct_folder = patient_data['rtstruct_folder']
+        rtstruct1_path = None
+        rtstruct2_path = None
         
-        # Look for subdirectories or files containing method identifiers
-        rtstruct1_files = []
-        rtstruct2_files = []
+        # Search through RTSTRUCTs linked to this CT series
+        for rt_uid, rt_data in ct_data['RTSTRUCT'].items():
+            rt_path = rt_data['path']
+            rt_path_lower = rt_path.lower()
+            
+            # Check if the path contains method identifiers
+            if method1_identifier.lower() in rt_path_lower:
+                rtstruct1_path = rt_path
+            elif method2_identifier.lower() in rt_path_lower:
+                rtstruct2_path = rt_path
         
-        # Search through RTSTRUCT folder structure
-        for root, dirs, files in os.walk(rtstruct_folder):
-            root_lower = root.lower()
-            
-            # Check if this folder or its parent contains method identifiers
-            if method1_identifier.lower() in root_lower:
-                rtstruct1_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.dcm')])
-            elif method2_identifier.lower() in root_lower:
-                rtstruct2_files.extend([os.path.join(root, f) for f in files if f.lower().endswith('.dcm')])
-            else:
-                # If no folder structure, check file names
-                for f in files:
-                    if f.lower().endswith('.dcm'):
-                        file_path = os.path.join(root, f)
-                        if method1_identifier.lower() in f.lower():
-                            rtstruct1_files.append(file_path)
-                        elif method2_identifier.lower() in f.lower():
-                            rtstruct2_files.append(file_path)
-        
-        # If we couldn't find files by method identifier, try date-based approach
-        if not rtstruct1_files and not rtstruct2_files:
-            print("  Warning: Could not identify RTSTRUCT files by method identifier.")
-            print(f"  Looking for date-based subdirectories in RTSTRUCT folder...")
-            
-            # Find all date subdirectories
-            date_dirs = []
-            for item in os.listdir(rtstruct_folder):
-                item_path = os.path.join(rtstruct_folder, item)
-                if os.path.isdir(item_path):
-                    date_dirs.append(item_path)
-            
-            date_dirs.sort()  # Sort by date
-            
-            if len(date_dirs) >= 2:
-                # Assume first date is method1, second is method2 (or vice versa)
-                print(f"  Found {len(date_dirs)} date-based subdirectories")
-                print(f"  Using {os.path.basename(date_dirs[0])} as method 1")
-                print(f"  Using {os.path.basename(date_dirs[-1])} as method 2")
-                
-                rtstruct1_files = find_dicom_files_in_folder(date_dirs[0])
-                rtstruct2_files = find_dicom_files_in_folder(date_dirs[-1])
-            elif len(date_dirs) == 1:
-                # Only one date directory - check if there are multiple RTSTRUCT files
-                all_rtstruct_files = find_dicom_files_in_folder(date_dirs[0])
-                if len(all_rtstruct_files) >= 2:
-                    print(f"  Found {len(all_rtstruct_files)} RTSTRUCT files in single date directory")
-                    print(f"  Using first as method 1, second as method 2")
-                    rtstruct1_files = [all_rtstruct_files[0]]
-                    rtstruct2_files = [all_rtstruct_files[1]]
-                else:
-                    print(f"  Warning: Not enough RTSTRUCT files found for patient {patient_id}")
-                    continue
-        
-        if not rtstruct1_files:
-            print(f"  Warning: No RTSTRUCT files found for method 1")
+        if not rtstruct1_path:
+            print(f"  Warning: No RTSTRUCT file found for method 1 (identifier: {method1_identifier})")
             continue
         
-        if not rtstruct2_files:
-            print(f"  Warning: No RTSTRUCT files found for method 2")
+        if not rtstruct2_path:
+            print(f"  Warning: No RTSTRUCT file found for method 2 (identifier: {method2_identifier})")
             continue
         
-        print(f"  Method 1: {len(rtstruct1_files)} RTSTRUCT file(s)")
-        print(f"  Method 2: {len(rtstruct2_files)} RTSTRUCT file(s)")
+        print(f"  Method 1 RTSTRUCT: {rtstruct1_path}")
+        print(f"  Method 2 RTSTRUCT: {rtstruct2_path}")
         
-        # Read RTSTRUCT files (use first file from each method)
+        # Read RTSTRUCT files
         try:
             print("  Reading RTSTRUCT files...")
-            rtstruct1 = read_dicomrtstruct(rtstruct1_files[0])
-            rtstruct2 = read_dicomrtstruct(rtstruct2_files[0])
+            rtstruct1 = read_dicomrtstruct(rtstruct1_path)
+            rtstruct2 = read_dicomrtstruct(rtstruct2_path)
         except Exception as e:
             print(f"  Error reading RTSTRUCT files: {str(e)}")
             continue
