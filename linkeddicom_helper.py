@@ -103,7 +103,7 @@ def get_structs_for_ct(patient_folder):
         # RTSTRUCT SOP Class UID: 1.2.840.10008.5.1.4.1.1.481.3
         for subject in g.subjects(RDF.type, None):
             types = list(g.objects(subject, RDF.type))
-            type_strings = [str(t).lower() for ts in types for t in [ts]]
+            type_strings = [str(t).lower() for t in types]
             
             is_rtstruct = any('rtstruct' in ts for ts in type_strings) or \
                          any('rtstructureset' in ts.replace(' ', '') for ts in type_strings)
@@ -133,7 +133,13 @@ def get_structs_for_ct(patient_folder):
                         
                         try:
                             if os.path.exists(rtstruct_path):
-                                ds = pydicom.dcmread(rtstruct_path, force=True)
+                                # Read DICOM file - use force=True only if initial read fails
+                                try:
+                                    ds = pydicom.dcmread(rtstruct_path)
+                                except Exception:
+                                    # Fallback to force=True for non-standard DICOM files
+                                    ds = pydicom.dcmread(rtstruct_path, force=True)
+                                    warnings.warn(f"Used force=True to read non-standard DICOM file: {rtstruct_path}")
                                 
                                 # Get structure names
                                 if hasattr(ds, 'StructureSetROISequence'):
@@ -148,8 +154,10 @@ def get_structs_for_ct(patient_folder):
                                                     for ref_series in ref_study.RTReferencedSeriesSequence:
                                                         if hasattr(ref_series, 'SeriesInstanceUID'):
                                                             referenced_series.append(ref_series.SeriesInstanceUID)
+                        except (IOError, OSError) as e:
+                            warnings.warn(f"Could not access RTSTRUCT file {rtstruct_path}: {str(e)}")
                         except Exception as e:
-                            warnings.warn(f"Could not read RTSTRUCT file {rtstruct_path}: {str(e)}")
+                            warnings.warn(f"Error reading RTSTRUCT file {rtstruct_path}: {str(e)}")
                         
                         # Link RTSTRUCT to all referenced CT series
                         if referenced_series:
@@ -166,7 +174,9 @@ def get_structs_for_ct(patient_folder):
                                         }
                         else:
                             # If we couldn't determine referenced series, link to all CT series as fallback
-                            # This ensures RTSTRUCTs are not lost
+                            # This is a conservative approach to ensure RTSTRUCTs are not lost
+                            warnings.warn(f"Could not determine referenced CT series for RTSTRUCT {rtstruct_path}. "
+                                        f"Linking to all available CT series as fallback.")
                             for ct_uid, ct_data in ct_series_dict.items():
                                 ct_data['RTSTRUCT'][rtstruct_uid] = {
                                     'UID': rtstruct_uid,

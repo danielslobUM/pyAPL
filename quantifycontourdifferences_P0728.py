@@ -247,8 +247,11 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
         print("  Using LinkedDICOM metadata to find CT and RTSTRUCT files...")
         try:
             ct_series_dict = get_structs_for_ct(patient_data['patient_folder'])
+        except (FileNotFoundError, IOError, OSError) as e:
+            print(f"  Error accessing LinkedDICOM metadata: {str(e)}")
+            continue
         except Exception as e:
-            print(f"  Error reading LinkedDICOM metadata: {str(e)}")
+            print(f"  Unexpected error reading LinkedDICOM metadata: {str(e)}")
             continue
         
         if not ct_series_dict:
