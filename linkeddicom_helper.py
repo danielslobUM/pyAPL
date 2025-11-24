@@ -9,6 +9,7 @@ import os
 import warnings
 from rdflib import Graph, Namespace, RDF, RDFS, URIRef
 import pydicom
+from pydicom.errors import InvalidDicomError
 
 
 def get_structs_for_ct(patient_folder):
@@ -136,10 +137,11 @@ def get_structs_for_ct(patient_folder):
                                 # Read DICOM file - use force=True only if initial read fails
                                 try:
                                     ds = pydicom.dcmread(rtstruct_path)
-                                except Exception:
+                                except (InvalidDicomError, KeyError, ValueError) as e:
                                     # Fallback to force=True for non-standard DICOM files
+                                    # Only catch specific DICOM parsing errors
                                     ds = pydicom.dcmread(rtstruct_path, force=True)
-                                    warnings.warn(f"Used force=True to read non-standard DICOM file: {rtstruct_path}")
+                                    warnings.warn(f"Used force=True to read non-standard DICOM file {rtstruct_path}: {str(e)}")
                                 
                                 # Get structure names
                                 if hasattr(ds, 'StructureSetROISequence'):
@@ -175,8 +177,14 @@ def get_structs_for_ct(patient_folder):
                         else:
                             # If we couldn't determine referenced series, link to all CT series as fallback
                             # This is a conservative approach to ensure RTSTRUCTs are not lost
-                            warnings.warn(f"Could not determine referenced CT series for RTSTRUCT {rtstruct_path}. "
-                                        f"Linking to all available CT series as fallback.")
+                            # WARNING: This may create incorrect associations
+                            warnings.warn(
+                                f"Could not determine referenced CT series for RTSTRUCT {rtstruct_path}. "
+                                f"Linking to all available CT series as fallback. "
+                                f"This may result in incorrect CT-RTSTRUCT associations.",
+                                UserWarning,
+                                stacklevel=2
+                            )
                             for ct_uid, ct_data in ct_series_dict.items():
                                 ct_data['RTSTRUCT'][rtstruct_uid] = {
                                     'UID': rtstruct_uid,
