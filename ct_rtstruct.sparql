@@ -1,0 +1,28 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX dicom: <https://johanvansoest.nl/ontologies/LinkedDicom/>
+PREFIX schema: <http://schema.org/>
+
+SELECT ?ctSerie ?ctSeriePath ?rtStruct ?rtStructPath ?structureName
+WHERE {
+    # Find CT Series
+    ?ctSerieInstance rdf:type dicom:CTImageStorage .
+    ?ctSerieInstance dicom:T0020000E ?ctSerie .
+    ?ctSerieInstance schema:contentUrl ?ctSeriePath .
+    
+    # Find RT Structure Sets that reference this CT series
+    ?rtStructInstance rdf:type dicom:RTStructureSetStorage .
+    ?rtStructInstance dicom:T00080018 ?rtStruct .
+    ?rtStructInstance schema:contentUrl ?rtStructPath .
+    
+    # Link RT Structure to CT through ReferencedFrameOfReferenceSequence
+    # This is a simplified query - may need adjustment based on actual TTL structure
+    ?rtStructInstance dicom:T30060010 ?frameOfRef .
+    ?frameOfRef dicom:T30060012 ?rtReferencedStudy .
+    ?rtReferencedStudy dicom:T30060014 ?rtReferencedSeries .
+    ?rtReferencedSeries dicom:T0020000E ?ctSerie .
+    
+    # Get structure names from the RT Structure Set
+    ?rtStructInstance dicom:T30060020 ?structureSetROI .
+    ?structureSetROI dicom:T30060026 ?structureName .
+}
