@@ -74,7 +74,7 @@ def calculate_voxel_diff_counts(ct, struct_ref, struct_new, struct_num_1, struct
     
     # Calculate distance transform
     spacing = [ct['PixelSpacingZi'], ct['PixelSpacingYi'], ct['PixelSpacingXi']]
-    dt = distance_transform_edt(~bw_ref_zyx, sampling=spacing)
+    dt = distance_transform_edt(~bw_ref_zyx.astype(bool), sampling=spacing)
     
     # Ensure tolerance is array
     if not isinstance(tolerance, (list, np.ndarray)):
