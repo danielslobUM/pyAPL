@@ -1,28 +1,39 @@
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX dicom: <https://johanvansoest.nl/ontologies/LinkedDicom/>
-PREFIX schema: <http://schema.org/>
+PREFIX ldcm: <https://johanvansoest.nl/ontologies/LinkedDicom/>
+PREFIX schema: <https://schema.org/>
 
 SELECT ?ctSerie ?ctSeriePath ?rtStruct ?rtStructPath ?structureName
 WHERE {
-    # Find CT Series
-    ?ctSerieInstance rdf:type dicom:CTImageStorage .
-    ?ctSerieInstance dicom:T0020000E ?ctSerie .
-    ?ctSerieInstance schema:contentUrl ?ctSeriePath .
+    # Find CT Series (not individual CT images)
+    ?ctSerieInstance rdf:type ldcm:Series .
+    ?ctSerieInstance ldcm:T0020000E ?ctSerie .
+    ?ctSerieInstance ldcm:T00080060 "CT" .
     
-    # Find RT Structure Sets that reference this CT series
-    ?rtStructInstance rdf:type dicom:RTStructureSetStorage .
-    ?rtStructInstance dicom:T00080018 ?rtStruct .
+    # Get the series path from any of its images
+    ?ctSerieInstance ldcm:has_image ?ctImage .
+    ?ctImage schema:contentUrl ?ctImagePath .
+    
+    # Extract the series directory path (remove filename from path)
+    # This is done by getting first image path - caller will need to extract directory
+    BIND(str(?ctImagePath) AS ?ctSeriePath)
+    
+    # Find RT Structure Sets
+    ?rtStructInstance rdf:type ldcm:Radiotherapy_Structure_Object .
+    ?rtStructInstance ldcm:T00080018 ?rtStruct .
     ?rtStructInstance schema:contentUrl ?rtStructPath .
     
     # Link RT Structure to CT through ReferencedFrameOfReferenceSequence
-    # This is a simplified query - may need adjustment based on actual TTL structure
-    ?rtStructInstance dicom:T30060010 ?frameOfRef .
-    ?frameOfRef dicom:T30060012 ?rtReferencedStudy .
-    ?rtReferencedStudy dicom:T30060014 ?rtReferencedSeries .
-    ?rtReferencedSeries dicom:T0020000E ?ctSerie .
+    ?rtStructInstance ldcm:T30060010 ?frameOfRef .
+    ?frameOfRef ldcm:has_sequence_item ?frameOfRefItem .
+    ?frameOfRefItem ldcm:T30060012 ?rtReferencedStudy .
+    ?rtReferencedStudy ldcm:has_sequence_item ?rtReferencedStudyItem .
+    ?rtReferencedStudyItem ldcm:T30060014 ?rtReferencedSeries .
+    ?rtReferencedSeries ldcm:has_sequence_item ?rtReferencedSeriesItem .
+    ?rtReferencedSeriesItem ldcm:T0020000E ?ctSerie .
     
     # Get structure names from the RT Structure Set
-    ?rtStructInstance dicom:T30060020 ?structureSetROI .
-    ?structureSetROI dicom:T30060026 ?structureName .
+    ?rtStructInstance ldcm:T30060020 ?structureSetROI .
+    ?structureSetROI ldcm:has_sequence_item ?structureSetROIItem .
+    ?structureSetROIItem ldcm:T30060026 ?structureName .
 }

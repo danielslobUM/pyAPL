@@ -73,6 +73,12 @@ def read_dicomct_light(filenames_in, read_image_data=True):
     # Read the first DICOM header
     ctout['DicomHeader'] = pydicom.dcmread(ctout['Filenames'][0], stop_before_pixels=True)
     
+    # Extract Series Description (DICOM tag 0008,103E)
+    if hasattr(ctout['DicomHeader'], 'SeriesDescription'):
+        ctout['SeriesDescription'] = ctout['DicomHeader'].SeriesDescription
+    else:
+        ctout['SeriesDescription'] = 'N/A'
+    
     # Store pixel spacing information (convert mm to cm)
     ctout['PixelSpacingXi'] = float(ctout['DicomHeader'].PixelSpacing[0]) / 10.0
     

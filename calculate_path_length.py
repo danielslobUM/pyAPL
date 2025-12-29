@@ -52,40 +52,52 @@ def calculate_path_length(image, struct_ref, struct_new, struct_num_1, struct_nu
         image, 
         struct_new['Struct'][struct_num_2]['Name']
     )
-    
+
     # Determine range with margin
     margin = 15
     min_x = min(minmax_oc['minX'], minmax_nc['minX']) - margin
     max_x = max(minmax_oc['maxX'], minmax_nc['maxX']) + margin
     min_z = min(minmax_oc['minZ'], minmax_nc['minZ']) - margin
     max_z = max(minmax_oc['maxZ'], minmax_nc['maxZ']) + margin
+    print('Determined range with margin')
     
     # Clip to valid range
     min_x = max(0, min_x)
     max_x = min(image['PixelNumXi'], max_x)
     min_z = max(0, min_z)
     max_z = min(image['PixelNumZi'], max_z)
+    print('Clipped to valid range')
     
     # Extract relevant regions
     contour1_crop = contour1[min_x:max_x, :, min_z:max_z]
     contour2_crop = contour2[min_x:max_x, :, min_z:max_z]
+    np.set_printoptions(threshold=np.inf)
+    
+    print("this is contour1_cropped:/n", np.sum(contour1_crop ==1), 
+          'this is contour2_cropped:/n', np.sum(contour2_crop ==1),
+         )
     
     # Convert to (Z, Y, X) for distance transform
     contour1_zyx = np.transpose(contour1_crop, (2, 1, 0))
+    print('Extracted relevant regions')
     
     # Calculate distance transform with proper spacing
     spacing = [image['PixelSpacingZi'], image['PixelSpacingYi'], image['PixelSpacingXi']]
-    distance_c1 = distance_transform_edt(~contour1_zyx, sampling=spacing)
+    distance_c1 = distance_transform_edt(~contour1_zyx.astype(bool), sampling=spacing)
+    print('Calculated distance transform with proper spacing')
     
     # Create tolerance-expanded contour1
     contour1_tol = distance_c1 <= tolerance
+    print('Created tolerance-expanded contour1')
     
     # Calculate difference
     contour2_zyx = np.transpose(contour2_crop, (2, 1, 0))
     diff_contours = contour1_tol.astype(int) - contour2_zyx.astype(int)
+    print('Calculated difference')
     
     # Initialize output
     path_length_outside = np.zeros(image['PixelNumYi'])
+    print('Initialized output')
     
     # Calculate path length per slice
     for ii in range(image['PixelNumYi']):
@@ -107,3 +119,4 @@ def calculate_path_length(image, struct_ref, struct_new, struct_num_1, struct_nu
             print(f'    -- Slice {ii} contains no GT contour but does contain an automatic contour')
     
     return path_length_outside
+    print(path_length_outside)

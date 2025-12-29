@@ -17,6 +17,7 @@ Adapted from quantify_contour_differences.py
 import os
 import sys
 import warnings
+import random
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -149,6 +150,49 @@ def discover_patient_data(dicom_root_folder):
     return patients
 
 
+def translate_linkeddicom_path(linkeddicom_path, dicom_root_folder):
+    """
+    Translate a path from linkeddicom.ttl to the actual Windows path.
+    
+    The linkeddicom.ttl files may contain paths from a different system (e.g., Linux).
+    This function extracts the relative path components and rebuilds the path
+    using the provided DICOM root folder.
+    
+    Parameters
+    ----------
+    linkeddicom_path : str
+        Path as stored in linkeddicom.ttl (e.g., /home/jovyan/r-drive/ICoNEA/DICOM/P0728.../CT/...)
+    dicom_root_folder : str
+        The actual root folder on this system (e.g., Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM)
+        
+    Returns
+    -------
+    str
+        Translated path for the current system
+    """
+    # Convert path separators to forward slashes for consistency
+    linkeddicom_path = linkeddicom_path.replace('\\', '/')
+    
+    # Look for the DICOM folder in the path and extract everything after it
+    # The patient folder (e.g., P0728C0006I13346699) should be right after DICOM
+    parts = linkeddicom_path.split('/')
+    
+    # Find the index of 'DICOM' in the path
+    try:
+        dicom_idx = parts.index('DICOM')
+        # Everything after DICOM is the relative path we need
+        relative_parts = parts[dicom_idx + 1:]
+        relative_path = os.path.join(*relative_parts)
+        
+        # Combine with the actual DICOM root folder
+        translated_path = os.path.join(dicom_root_folder, relative_path)
+        return translated_path
+    except ValueError:
+        # If 'DICOM' not found in path, return the original path
+        warnings.warn(f"Could not translate path: {linkeddicom_path}")
+        return linkeddicom_path
+
+
 def find_dicom_files_in_folder(folder_path):
     """
     Recursively find all DICOM files (.dcm) in a folder structure.
@@ -230,8 +274,9 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
     
     # Limit number of patients if max_patients is specified
     if max_patients is not None and max_patients > 0:
-        patients = patients[:max_patients]
-        print(f"Limiting to first {len(patients)} patient(s) for sample test")
+        # Randomly select patients instead of taking the first N
+        patients = random.sample(patients, min(max_patients, len(patients)))
+        print(f"Randomly selected {len(patients)} patient(s) for sample test")
     
     # Process each patient
     all_results = []
@@ -258,200 +303,218 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             print(f"  Warning: No CT series found in LinkedDICOM metadata")
             continue
         
-        # Get the first CT series (could be extended to process multiple CT series)
-        ct_series_uid = list(ct_series_dict.keys())[0]
-        ct_data = ct_series_dict[ct_series_uid]
+        # Process all CT series found for this patient
+        print(f"  Found {len(ct_series_dict)} CT series for this patient")
         
-        print(f"  Found CT series: {ct_series_uid}")
-        print(f"  CT path: {ct_data['path']}")
-        
-        # Find CT files in the CT series path
-        ct_files = find_dicom_files_in_folder(ct_data['path'])
-        
-        if not ct_files:
-            print(f"  Warning: No CT DICOM files found in {ct_data['path']}")
-            continue
-        
-        print(f"  Found {len(ct_files)} CT file(s)")
-        
-        # Read CT data
-        print("  Reading CT data...")
-        try:
-            imaging_data = read_dicomct_light(ct_files)
-        except Exception as e:
-            print(f"  Error reading CT data: {str(e)}")
-            continue
-        
-        # Find RTSTRUCT files for both methods from the LinkedDICOM data
-        print("  Searching for RTSTRUCT files...")
-        rtstruct1_path = None
-        rtstruct2_path = None
-        
-        # Search through RTSTRUCTs linked to this CT series
-        for rt_uid, rt_data in ct_data['RTSTRUCT'].items():
-            rt_path = rt_data['path']
-            rt_path_lower = rt_path.lower()
+        for ct_series_idx, (ct_series_uid, ct_data) in enumerate(ct_series_dict.items()):
+            print(f"\n  {'='*76}")
+            print(f"  Processing CT series {ct_series_idx + 1}/{len(ct_series_dict)}: {ct_series_uid}")
+            print(f"  {'='*76}")
+            print(f"  CT path (from TTL): {ct_data['path']}")
             
-            # Check if the path contains method identifiers
-            if method1_identifier.lower() in rt_path_lower:
-                rtstruct1_path = rt_path
-            elif method2_identifier.lower() in rt_path_lower:
-                rtstruct2_path = rt_path
-        
-        # If method identifiers not found, use fallback approach with available RTSTRUCTs
-        if not rtstruct1_path or not rtstruct2_path:
-            print(f"  Warning: Could not identify RTSTRUCT files by method identifier.")
-            print(f"  Using fallback: selecting from available RTSTRUCTs linked to CT series...")
+            # Translate the path to the current system
+            ct_path_translated = translate_linkeddicom_path(ct_data['path'], dicom_root_folder)
+            print(f"  CT path (translated): {ct_path_translated}")
             
-            # Get all RTSTRUCT paths from the linked RTSTRUCTs
-            available_rtstructs = [(rt_uid, rt_data['path']) for rt_uid, rt_data in ct_data['RTSTRUCT'].items()]
+            # Find CT files in the CT series path
+            ct_files = find_dicom_files_in_folder(ct_path_translated)
             
+            if not ct_files:
+                print(f"  Warning: No CT DICOM files found in {ct_data['path']}")
+                print(f"  Skipping this CT series.")
+                continue
+            
+            print(f"  Found {len(ct_files)} CT file(s)")
+            
+            # Read CT data
+            print("  Reading CT data...")
+            try:
+                imaging_data = read_dicomct_light(ct_files)
+                # Extract Series Description from CT data
+                ct_series_description = imaging_data.get('SeriesDescription', 'N/A')
+                print(f"  Series Description: {ct_series_description}")
+            except Exception as e:
+                print(f"  Error reading CT data: {str(e)}")
+                print(f"  Skipping this CT series.")
+                continue
+            
+            # Identify RTSTRUCT files linked to this CT series
+            print("  Identifying RTSTRUCT files linked to CT series...")
+            
+            # Get all RTSTRUCT paths from the linked RTSTRUCTs (and translate them)
+            available_rtstructs = [(rt_uid, translate_linkeddicom_path(rt_data['path'], dicom_root_folder)) 
+                                    for rt_uid, rt_data in ct_data['RTSTRUCT'].items()]
+            
+            print(f"\n  All RTSTRUCTs in available_rtstructs:")
+            print(f"  {available_rtstructs}")
+            
+            print(f"\n  Found {len(available_rtstructs)} RTSTRUCT(s) linked to CT series:")
+            for idx, (rt_uid, rt_path) in enumerate(available_rtstructs):
+                print(f"    [{idx}] UID: {rt_uid}")
+                print(f"        Path: {rt_path}")
+            
+            # Verify we have at least 2 RTSTRUCTs for comparison
             if len(available_rtstructs) < 2:
-                print(f"  Warning: Found only {len(available_rtstructs)} RTSTRUCT(s) linked to CT series.")
-                print(f"  Need at least 2 RTSTRUCTs for comparison. Skipping patient.")
+                print(f"  Warning: Need at least 2 RTSTRUCTs for comparison. Found {len(available_rtstructs)}.")
+                print(f"  Skipping this CT series.")
+                
+                # Record this skipped CT series in results
+                skip_result = {
+                    'pNumber': patient_id,
+                    'CTSeriesUID': ct_series_uid[-12:],
+                    'SeriesDescription': ct_series_description,
+                    'VOIName': 'N/A',
+                    'Dice': None,
+                    'Status': f'Insufficient RTSTRUCTs ({len(available_rtstructs)} found, need 2)'
+                }
+                if calc_all_parameters != 0:
+                    skip_result['APL'] = None
+                    skip_result['SDSC'] = None
+                all_results.append(skip_result)
                 continue
             
             # Sort RTSTRUCTs by path (which often includes date) to get consistent ordering
             available_rtstructs.sort(key=lambda x: x[1])
             
-            # Assign first and second as method 1 and method 2
-            if not rtstruct1_path:
-                rtstruct1_path = available_rtstructs[0][1]
-                print(f"  Using as method 1: {os.path.basename(os.path.dirname(rtstruct1_path))}/{os.path.basename(rtstruct1_path)}")
+            # Select first and last RTSTRUCTs (typically oldest vs newest by date)
+            rtstruct1_path = available_rtstructs[0][1]
+            rtstruct2_path = available_rtstructs[-1][1]
             
-            if not rtstruct2_path:
-                # Use the last one if we have method1, or the second one if we don't have method1
-                idx = -1 if rtstruct1_path else 1
-                rtstruct2_path = available_rtstructs[idx][1]
-                print(f"  Using as method 2: {os.path.basename(os.path.dirname(rtstruct2_path))}/{os.path.basename(rtstruct2_path)}")
-        
-        if not rtstruct1_path:
-            print(f"  Warning: No RTSTRUCT file found for method 1")
-            continue
-        
-        if not rtstruct2_path:
-            print(f"  Warning: No RTSTRUCT file found for method 2")
-            continue
-        
-        print(f"  Method 1 RTSTRUCT: {rtstruct1_path}")
-        print(f"  Method 2 RTSTRUCT: {rtstruct2_path}")
-        
-        # Read RTSTRUCT files
-        try:
-            print("  Reading RTSTRUCT files...")
-            rtstruct1 = read_dicomrtstruct(rtstruct1_path)
-            rtstruct2 = read_dicomrtstruct(rtstruct2_path)
-        except Exception as e:
-            print(f"  Error reading RTSTRUCT files: {str(e)}")
-            continue
-        
-        # Get structure names
-        vois1 = [s['Name'] for s in rtstruct1['Struct']]
-        vois2 = [s['Name'] for s in rtstruct2['Struct']]
-        
-        print(f"  Method 1 structures: {len(vois1)}")
-        print(f"  Method 2 structures: {len(vois2)}")
-        
-        # Find common VOIs
-        common_vois = [v for v in vois1 if v in vois2]
-        
-        if not common_vois:
-            warnings.warn(f'No common VOIs found for patient {patient_id}. Skipping patient.')
-            continue
-        
-        print(f"  Common structures: {len(common_vois)}")
-        
-        # Select OARs if not already selected
-        if selected_oars is None and not oars_selected:
-            print(f'\n  Common VOIs: {", ".join(common_vois)}')
-            print('  Please enter the indices of OARs to include (comma-separated, or press Enter for all):')
-            for i, voi in enumerate(common_vois):
-                print(f'  {i}: {voi}')
+            print(f"\n  Selected for comparison:")
+            print(f"    RTSTRUCT 1: {os.path.basename(os.path.dirname(rtstruct1_path))}/{os.path.basename(rtstruct1_path)}")
+            print(f"    RTSTRUCT 2: {os.path.basename(os.path.dirname(rtstruct2_path))}/{os.path.basename(rtstruct2_path)}")
             
-            selection = input('  Selection (e.g., 0,2,4 or press Enter for all): ').strip()
-            if selection:
-                indices = [int(x.strip()) for x in selection.split(',')]
-                selected_oars = [common_vois[i] for i in indices if i < len(common_vois)]
-            else:
-                selected_oars = common_vois
-            
-            print(f'  Selected OARs: {", ".join(selected_oars)}')
-            oars_selected = True
-        
-        # Use the selected OARs
-        to_compare = [i for i, v in enumerate(vois1) if v in selected_oars and v in vois2]
-        
-        if not to_compare:
-            warnings.warn(f'None of the selected OARs are present for patient {patient_id}. Skipping patient.')
-            continue
-        
-        print(f"  Comparing {len(to_compare)} structure(s)")
-        
-        # Compose structure matrices
-        print("  Composing structure matrices...")
-        try:
-            voi1 = compose_struct_matrix(imaging_data, rtstruct1)
-            voi2 = compose_struct_matrix(imaging_data, rtstruct2)
-        except Exception as e:
-            print(f"  Error composing structure matrices: {str(e)}")
-            continue
-        
-        # Calculate metrics for each structure
-        print("  Calculating metrics...")
-        for comparison_no, method1_struct_no in enumerate(to_compare):
-            voi_name = vois1[method1_struct_no]
-            method2_struct_no = vois2.index(voi_name)
-            
-            print(f"    Processing: {voi_name}")
-            
-            # Check if VOIs are empty
-            is_empty1 = not has_contour_points_local(rtstruct1['Struct'][method1_struct_no])
-            is_empty2 = not has_contour_points_local(rtstruct2['Struct'][method2_struct_no])
-            
-            if is_empty1 or is_empty2:
-                which_side = 'both' if is_empty1 and is_empty2 else ('RTSTRUCT1' if is_empty1 else 'RTSTRUCT2')
-                warnings.warn(f'Skipping VOI "{voi_name}" for patient {patient_id}: empty contour in {which_side}.')
-                continue
-            
-            # Initialize result
-            result = {
-                'pNumber': patient_id,
-                'VOIName': voi_name
-            }
-            
+            # Read RTSTRUCT files
             try:
-                # Calculate volumetric DICE
-                result['Dice'] = calculate_dice_logical(voi1, voi2, method1_struct_no + 1, method2_struct_no + 1)
-                
-                # Calculate APL and Surface DSC if requested
-                if calc_all_parameters != 0:
-                    # Calculate APL
-                    temp_path_length = calculate_different_path_length_v2(
-                        imaging_data, rtstruct1, rtstruct2, 
-                        method1_struct_no, method2_struct_no, apl_tolerance
-                    )
-                    result['APL'] = np.sum(temp_path_length)
-                    
-                    # Calculate Surface DSC
-                    result['SDSC'] = calculate_surface_dsc(
-                        imaging_data, rtstruct1, rtstruct2,
-                        method1_struct_no, method2_struct_no, sdsc_tolerance
-                    )
-                
-                all_results.append(result)
-                print(f"      DICE: {result['Dice']:.4f}")
-                if calc_all_parameters != 0:
-                    print(f"      APL:  {result['APL']:.4f}")
-                    print(f"      SDSC: {result['SDSC']:.4f}")
-            
+                print("  Reading RTSTRUCT files...")
+                rtstruct1 = read_dicomrtstruct(rtstruct1_path)
+                rtstruct2 = read_dicomrtstruct(rtstruct2_path)
             except Exception as e:
-                print(f"    Error calculating metrics for {voi_name}: {str(e)}")
+                print(f"  Error reading RTSTRUCT files: {str(e)}")
+                print(f"  Skipping this CT series.")
                 continue
+        
+            # Get structure names
+            vois1 = [s['Name'] for s in rtstruct1['Struct']]
+            vois2 = [s['Name'] for s in rtstruct2['Struct']]
+            
+            print(f"  Method 1 structures: {len(vois1)}")
+            print(f"  Method 2 structures: {len(vois2)}")
+            
+            # Find common VOIs
+            common_vois = [v for v in vois1 if v in vois2]
+            
+            # Exclude specific VOIs (case-insensitive)
+            excluded_vois = ['BODY', 'Skin', ]
+            common_vois_filtered = [v for v in common_vois if v.lower() not in excluded_vois]
+            
+            if len(common_vois) > len(common_vois_filtered):
+                excluded_found = [v for v in common_vois if v.lower() in excluded_vois]
+                print(f"  Excluded VOIs: {', '.join(excluded_found)}")
+            
+            common_vois = common_vois_filtered
+            
+            if not common_vois:
+                warnings.warn(f'No valid VOIs found for CT series {ct_series_uid} after exclusions. Skipping this CT series.')
+                continue
+            
+            print(f"  Common structures (after exclusions): {len(common_vois)}")
+            
+            # Select OARs if not already selected
+            if selected_oars is None and not oars_selected:
+                print(f'\n  Common VOIs: {", ".join(common_vois)}')
+                print('  Please enter the indices of OARs to include (comma-separated, or press Enter for all):')
+                for i, voi in enumerate(common_vois):
+                    print(f'  {i}: {voi}')
+                
+                selection = input('  Selection (e.g., 0,2,4 or press Enter for all): ').strip()
+                if selection:
+                    indices = [int(x.strip()) for x in selection.split(',')]
+                    selected_oars = [common_vois[i] for i in indices if i < len(common_vois)]
+                else:
+                    selected_oars = common_vois
+                
+                print(f'  Selected OARs: {", ".join(selected_oars)}')
+                oars_selected = True
+            
+            # Use the selected OARs
+            to_compare = [i for i, v in enumerate(vois1) if v in selected_oars and v in vois2]
+            
+            if not to_compare:
+                warnings.warn(f'None of the selected OARs are present for CT series {ct_series_uid}. Skipping this CT series.')
+                continue
+            
+            print(f"  Comparing {len(to_compare)} structure(s)")
+            
+            # Compose structure matrices
+            print("  Composing structure matrices...")
+            try:
+                voi1 = compose_struct_matrix(imaging_data, rtstruct1)
+                voi2 = compose_struct_matrix(imaging_data, rtstruct2)
+            except Exception as e:
+                print(f"  Error composing structure matrices: {str(e)}")
+                print(f"  Skipping this CT series.")
+                continue
+            
+            # Calculate metrics for each structure
+            print("  Calculating metrics...")
+            for comparison_no, method1_struct_no in enumerate(to_compare):
+                voi_name = vois1[method1_struct_no]
+                method2_struct_no = vois2.index(voi_name)
+                
+                print(f"    Processing: {voi_name}")
+                
+                # Check if VOIs are empty
+                is_empty1 = not has_contour_points_local(rtstruct1['Struct'][method1_struct_no])
+                is_empty2 = not has_contour_points_local(rtstruct2['Struct'][method2_struct_no])
+                
+                if is_empty1 or is_empty2:
+                    which_side = 'both' if is_empty1 and is_empty2 else ('RTSTRUCT1' if is_empty1 else 'RTSTRUCT2')
+                    warnings.warn(f'Skipping VOI "{voi_name}" for CT series {ct_series_uid}: empty contour in {which_side}.')
+                    continue
+                
+                # Initialize result with CT series information
+                result = {
+                    'pNumber': patient_id,
+                    'CTSeriesUID': ct_series_uid[-12:],  # Last 12 chars for readability
+                    'SeriesDescription': ct_series_description,
+                    'VOIName': voi_name
+                }
+                
+                try:
+                    # Calculate volumetric DICE
+                    result['Dice'] = calculate_dice_logical(voi1, voi2, method1_struct_no + 1, method2_struct_no + 1)
+                    
+                    # Calculate APL and Surface DSC if requested
+                    if calc_all_parameters != 0:
+                        # Calculate APL
+                        temp_path_length = calculate_different_path_length_v2(
+                            imaging_data, rtstruct1, rtstruct2, 
+                            method1_struct_no, method2_struct_no, apl_tolerance
+                        )
+                        result['APL'] = np.sum(temp_path_length)
+                        print(temp_path_length)
+
+                        # Calculate Surface DSC
+                        result['SDSC'] = calculate_surface_dsc(
+                            imaging_data, rtstruct1, rtstruct2,
+                            method1_struct_no, method2_struct_no, sdsc_tolerance
+                        )
+                    
+                    all_results.append(result)
+                    print(f"      DICE: {result['Dice']:.4f}")
+                    if calc_all_parameters != 0:
+                        print(f"      APL:  {result['APL']:.4f}")
+                        print(f"      SDSC: {result['SDSC']:.4f}")
+                
+                except Exception as e:
+                    print(f"    Error calculating metrics for {voi_name}: {str(e)}")
+                    continue
     
     # Create results table
     if all_results:
         results_table = pd.DataFrame(all_results)
-        results_table = results_table.sort_values(['pNumber', 'VOIName'])
+        results_table = results_table.sort_values(['pNumber', 'CTSeriesUID', 'VOIName'])
         return results_table
     else:
         return pd.DataFrame()
@@ -460,10 +523,10 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
 if __name__ == '__main__':
     # Configuration
     # Update these paths for your dataset
-    DICOM_ROOT_FOLDER = '/path/to/DICOM'  # Update this path
+    DICOM_ROOT_FOLDER = 'Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM'  # Update this path
     METHOD1_IDENTIFIER = 'method1'  # Update to match your folder/file naming
     METHOD2_IDENTIFIER = 'method2'  # Update to match your folder/file naming
-    MAX_PATIENTS = 5  # Limit to 5 patients for sample test (set to None for all patients)
+    MAX_PATIENTS = 10 # Limit to  patients for sample test (set to None for all patients)
     
     # Parse command-line arguments if provided
     if len(sys.argv) > 1:

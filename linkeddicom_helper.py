@@ -34,14 +34,24 @@ def get_structs_for_ct(patient_path):
 
         # add CT series if not exists
         if not str(row.ctSerie) in ctSeries:
+            # Extract directory path from the CT image path
+            ct_image_path = str(row.ctSeriePath)
+            ct_series_dir = os.path.dirname(ct_image_path)
+            
+            print(f"\n  [LinkedDICOM] Found CT Series: {str(row.ctSerie)}")
+            print(f"  [LinkedDICOM] CT Path: {ct_series_dir}")
+            
             ctSeries[str(row.ctSerie)] = {
                 "UID": str(row.ctSerie),
-                "path": str(row.ctSeriePath),
+                "path": ct_series_dir,
                 "RTSTRUCT": { }
             }
 
         # add RTSTRUCT if not exists
         if not str(row.rtStruct) in ctSeries[str(row.ctSerie)]["RTSTRUCT"]:
+            print(f"  [LinkedDICOM] Linked RTSTRUCT: {str(row.rtStruct)}")
+            print(f"  [LinkedDICOM]   Path: {str(row.rtStructPath)}")
+            
             ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)] = {
                 "UID": str(row.rtStruct),
                 "path": str(row.rtStructPath),
@@ -52,11 +62,18 @@ def get_structs_for_ct(patient_path):
         if not str(row.structureName) in ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)]["structure_names"]:
             ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)]["structure_names"].append(str(row.structureName))
 
+    # Print summary of what was found
+    print(f"\n  [LinkedDICOM] Summary: Found {len(ctSeries)} CT series")
+    for ct_uid, ct_data in ctSeries.items():
+        print(f"  [LinkedDICOM]   CT Series {ct_uid}: {len(ct_data['RTSTRUCT'])} RTSTRUCTs linked")
+        for rt_uid in ct_data['RTSTRUCT'].keys():
+            print(f"  [LinkedDICOM]     - RTSTRUCT UID: {rt_uid}")
+
     return ctSeries
 
 
 if __name__ == '__main__':
-    dicom_directory = "/home/jovyan/r-drive/ICoNEA/DICOM"
+    dicom_directory = 'Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM'
     for folder_name in os.listdir(dicom_directory):
         current_dir = os.path.join(dicom_directory, folder_name)
     
