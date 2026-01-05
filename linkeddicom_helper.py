@@ -55,19 +55,35 @@ def get_structs_for_ct(patient_path):
             ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)] = {
                 "UID": str(row.rtStruct),
                 "path": str(row.rtStructPath),
-                "structure_names": [ ]
+                "structure_names": [ ],
+                "RTPLAN": None  # Each RTSTRUCT can reference one RTPLAN
             }
 
         # add structureName if not exists
         if not str(row.structureName) in ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)]["structure_names"]:
             ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)]["structure_names"].append(str(row.structureName))
 
+        # add RTPLAN to the RTSTRUCT that references it
+        if hasattr(row, 'rtPlan') and row.rtPlan is not None:
+            # Check if this RTSTRUCT already has an RTPLAN set
+            if ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)]["RTPLAN"] is None:
+                print(f"  [LinkedDICOM] Found Referenced Structure Set Sequence (300C,0060) link:")
+                print(f"  [LinkedDICOM]   RTPLAN {str(row.rtPlan)} references RTSTRUCT {str(row.rtStruct)}")
+                print(f"  [LinkedDICOM]   RTPLAN Path: {str(row.rtPlanPath)}")
+                
+                ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)]["RTPLAN"] = {
+                    "UID": str(row.rtPlan),
+                    "path": str(row.rtPlanPath)
+                }
+
     # Print summary of what was found
     print(f"\n  [LinkedDICOM] Summary: Found {len(ctSeries)} CT series")
     for ct_uid, ct_data in ctSeries.items():
-        print(f"  [LinkedDICOM]   CT Series {ct_uid}: {len(ct_data['RTSTRUCT'])} RTSTRUCTs linked")
-        for rt_uid in ct_data['RTSTRUCT'].keys():
-            print(f"  [LinkedDICOM]     - RTSTRUCT UID: {rt_uid}")
+        rtplans_count = sum(1 for rt in ct_data['RTSTRUCT'].values() if rt['RTPLAN'] is not None)
+        print(f"  [LinkedDICOM]   CT Series {ct_uid}: {len(ct_data['RTSTRUCT'])} RTSTRUCTs linked, {rtplans_count} with RTPLANs")
+        for rt_uid, rt_data in ct_data['RTSTRUCT'].items():
+            rtplan_status = f"RTPLAN: {rt_data['RTPLAN']['UID']}" if rt_data['RTPLAN'] else "No RTPLAN"
+            print(f"  [LinkedDICOM]     - RTSTRUCT UID: {rt_uid} ({rtplan_status})")
 
     return ctSeries
 

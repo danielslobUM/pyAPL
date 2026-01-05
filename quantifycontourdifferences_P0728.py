@@ -18,6 +18,7 @@ import os
 import sys
 import warnings
 import random
+import platform
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -25,10 +26,11 @@ from rdflib import Graph, Namespace, URIRef
 from linkeddicom_helper import get_structs_for_ct
 from read_dicomct_light import read_dicomct_light
 from read_dicomrtstruct import read_dicomrtstruct
+from read_dicomrtplan import read_dicomrtplan
 from compose_struct_matrix import compose_struct_matrix
 from calculate_dice_logical import calculate_dice_logical
 from calculate_surface_dsc import calculate_surface_dsc
-from calculate_different_path_length_v2 import calculate_different_path_length_v2
+from calculate_path_length import calculate_path_length
 from has_contour_points_local import has_contour_points_local
 
 
@@ -158,6 +160,8 @@ def translate_linkeddicom_path(linkeddicom_path, dicom_root_folder):
     This function extracts the relative path components and rebuilds the path
     using the provided DICOM root folder.
     
+    On Linux, if paths are already correct, no translation is performed.
+    
     Parameters
     ----------
     linkeddicom_path : str
@@ -170,6 +174,10 @@ def translate_linkeddicom_path(linkeddicom_path, dicom_root_folder):
     str
         Translated path for the current system
     """
+    # On Linux, if the path already exists, don't translate
+    if platform.system() == 'Linux' and os.path.exists(linkeddicom_path):
+        return linkeddicom_path
+    
     # Convert path separators to forward slashes for consistency
     linkeddicom_path = linkeddicom_path.replace('\\', '/')
     
@@ -330,9 +338,6 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             print("  Reading CT data...")
             try:
                 imaging_data = read_dicomct_light(ct_files)
-                # Extract Series Description from CT data
-                ct_series_description = imaging_data.get('SeriesDescription', 'N/A')
-                print(f"  Series Description: {ct_series_description}")
             except Exception as e:
                 print(f"  Error reading CT data: {str(e)}")
                 print(f"  Skipping this CT series.")
@@ -342,15 +347,16 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             print("  Identifying RTSTRUCT files linked to CT series...")
             
             # Get all RTSTRUCT paths from the linked RTSTRUCTs (and translate them)
-            available_rtstructs = [(rt_uid, translate_linkeddicom_path(rt_data['path'], dicom_root_folder)) 
+            available_rtstructs = [(rt_uid, translate_linkeddicom_path(rt_data['path'], dicom_root_folder), rt_data) 
                                     for rt_uid, rt_data in ct_data['RTSTRUCT'].items()]
             
             print(f"\n  All RTSTRUCTs in available_rtstructs:")
-            print(f"  {available_rtstructs}")
+            print(f"  {[(uid, path) for uid, path, _ in available_rtstructs]}")
             
             print(f"\n  Found {len(available_rtstructs)} RTSTRUCT(s) linked to CT series:")
-            for idx, (rt_uid, rt_path) in enumerate(available_rtstructs):
-                print(f"    [{idx}] UID: {rt_uid}")
+            for idx, (rt_uid, rt_path, rt_data) in enumerate(available_rtstructs):
+                rtplan_info = f" (with RTPLAN: {rt_data['RTPLAN']['UID']})" if rt_data['RTPLAN'] else " (no RTPLAN)"
+                print(f"    [{idx}] UID: {rt_uid}{rtplan_info}")
                 print(f"        Path: {rt_path}")
             
             # Verify we have at least 2 RTSTRUCTs for comparison
@@ -362,11 +368,41 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
                 skip_result = {
                     'pNumber': patient_id,
                     'CTSeriesUID': ct_series_uid[-12:],
-                    'SeriesDescription': ct_series_description,
+                    'Enough_RTSTRUCTs': 'No',
+                    'RTPLAN_Present': np.nan,
+                    'Common VOI': np.nan,
                     'VOIName': 'N/A',
                     'Dice': None,
                     'Status': f'Insufficient RTSTRUCTs ({len(available_rtstructs)} found, need 2)'
                 }
+                # Add RTPLAN metadata (use first available RTPLAN if any RTSTRUCT has one)
+                first_rtplan = None
+                if len(available_rtstructs) > 0:
+                    for _, _, rt_data in available_rtstructs:
+                        if rt_data['RTPLAN'] is not None:
+                            rtplan_path = translate_linkeddicom_path(rt_data['RTPLAN']['path'], dicom_root_folder)
+                            try:
+                                first_rtplan = read_dicomrtplan(rtplan_path)
+                                skip_result['RTPLAN_Present'] = 'Yes'
+                                break
+                            except:
+                                pass
+                
+                if not first_rtplan:
+                    skip_result['RTPLAN_Present'] = 'No'
+                
+                if first_rtplan:
+                    skip_result['RTPLAN_StudyDescription'] = first_rtplan.get('StudyDescription', 'N/A')
+                    skip_result['RTPLAN_RTPlanName'] = first_rtplan.get('RTPlanName', 'N/A')
+                    skip_result['RTPLAN_NumberOfFractions'] = first_rtplan.get('NumberOfFractionsPlanned', 'N/A')
+                    skip_result['RTPLAN_TargetPrescriptionDose'] = first_rtplan.get('TargetPrescriptionDose', 'N/A')
+                    skip_result['RTPLAN_SetupTechniqueDescription'] = first_rtplan.get('SetupTechniqueDescription', 'N/A')
+                else:
+                    skip_result['RTPLAN_StudyDescription'] = 'No RTPLAN'
+                    skip_result['RTPLAN_RTPlanName'] = 'No RTPLAN'
+                    skip_result['RTPLAN_NumberOfFractions'] = 'No RTPLAN'
+                    skip_result['RTPLAN_TargetPrescriptionDose'] = 'No RTPLAN'
+                    skip_result['RTPLAN_SetupTechniqueDescription'] = 'No RTPLAN'
                 if calc_all_parameters != 0:
                     skip_result['APL'] = None
                     skip_result['SDSC'] = None
@@ -377,8 +413,8 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             available_rtstructs.sort(key=lambda x: x[1])
             
             # Select first and last RTSTRUCTs (typically oldest vs newest by date)
-            rtstruct1_path = available_rtstructs[0][1]
-            rtstruct2_path = available_rtstructs[-1][1]
+            rtstruct1_uid, rtstruct1_path, rtstruct1_data = available_rtstructs[0]
+            rtstruct2_uid, rtstruct2_path, rtstruct2_data = available_rtstructs[-1]
             
             print(f"\n  Selected for comparison:")
             print(f"    RTSTRUCT 1: {os.path.basename(os.path.dirname(rtstruct1_path))}/{os.path.basename(rtstruct1_path)}")
@@ -389,10 +425,50 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
                 print("  Reading RTSTRUCT files...")
                 rtstruct1 = read_dicomrtstruct(rtstruct1_path)
                 rtstruct2 = read_dicomrtstruct(rtstruct2_path)
+                
+                # Extract Series Description from both RTSTRUCT files
+                rtstruct1_series_desc = rtstruct1.get('PlanID', 'N/A')
+                rtstruct2_series_desc = rtstruct2.get('PlanID', 'N/A')
+                print(f"  RTSTRUCT 1 Series Description: {rtstruct1_series_desc}")
+                print(f"  RTSTRUCT 2 Series Description: {rtstruct2_series_desc}")
             except Exception as e:
                 print(f"  Error reading RTSTRUCT files: {str(e)}")
                 print(f"  Skipping this CT series.")
                 continue
+            
+            # Read RTPLAN files associated with each RTSTRUCT
+            rtplan1 = None
+            rtplan2 = None
+            
+            if rtstruct1_data['RTPLAN'] is not None:
+                rtplan1_path = translate_linkeddicom_path(rtstruct1_data['RTPLAN']['path'], dicom_root_folder)
+                print(f"\n  Reading RTPLAN for RTSTRUCT 1: {os.path.basename(rtplan1_path)}")
+                try:
+                    rtplan1 = read_dicomrtplan(rtplan1_path)
+                    if rtplan1:
+                        print(f"    Study Description: {rtplan1.get('StudyDescription', 'N/A')}")
+                        print(f"    RT Plan Name: {rtplan1.get('RTPlanName', 'N/A')}")
+                        print(f"    Number of Fractions: {rtplan1.get('NumberOfFractionsPlanned', 'N/A')}")
+                        print(f"    Target Prescription Dose: {rtplan1.get('TargetPrescriptionDose', 'N/A')}")
+                except Exception as e:
+                    print(f"    Warning: Could not read RTPLAN for RTSTRUCT 1: {str(e)}")
+            else:
+                print(f"\n  RTSTRUCT 1 has no associated RTPLAN")
+            
+            if rtstruct2_data['RTPLAN'] is not None:
+                rtplan2_path = translate_linkeddicom_path(rtstruct2_data['RTPLAN']['path'], dicom_root_folder)
+                print(f"\n  Reading RTPLAN for RTSTRUCT 2: {os.path.basename(rtplan2_path)}")
+                try:
+                    rtplan2 = read_dicomrtplan(rtplan2_path)
+                    if rtplan2:
+                        print(f"    Study Description: {rtplan2.get('StudyDescription', 'N/A')}")
+                        print(f"    RT Plan Name: {rtplan2.get('RTPlanName', 'N/A')}")
+                        print(f"    Number of Fractions: {rtplan2.get('NumberOfFractionsPlanned', 'N/A')}")
+                        print(f"    Target Prescription Dose: {rtplan2.get('TargetPrescriptionDose', 'N/A')}")
+                except Exception as e:
+                    print(f"    Warning: Could not read RTPLAN for RTSTRUCT 2: {str(e)}")
+            else:
+                print(f"\n  RTSTRUCT 2 has no associated RTPLAN")
         
             # Get structure names
             vois1 = [s['Name'] for s in rtstruct1['Struct']]
@@ -416,6 +492,37 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             
             if not common_vois:
                 warnings.warn(f'No valid VOIs found for CT series {ct_series_uid} after exclusions. Skipping this CT series.')
+                # Record this skipped CT series in results
+                skip_result = {
+                    'pNumber': patient_id,
+                    'CTSeriesUID': ct_series_uid[-12:],
+                    'RTSTRUCT1_SeriesDescription': rtstruct1_series_desc,
+                    'RTSTRUCT2_SeriesDescription': rtstruct2_series_desc,
+                    'Enough_RTSTRUCTs': 'Yes',
+                    'RTPLAN_Present': 'Yes' if (rtplan1 is not None or rtplan2 is not None) else 'No',
+                    'Common VOI': 'No',
+                    'VOIName': 'N/A',
+                    'Dice': None,
+                    'Status': 'No common VOIs after exclusions'
+                }
+                # Add RTPLAN metadata (use first available RTPLAN, preferring rtplan1)
+                active_rtplan = rtplan1 if rtplan1 is not None else rtplan2
+                if active_rtplan:
+                    skip_result['RTPLAN_StudyDescription'] = active_rtplan.get('StudyDescription', 'N/A')
+                    skip_result['RTPLAN_RTPlanName'] = active_rtplan.get('RTPlanName', 'N/A')
+                    skip_result['RTPLAN_NumberOfFractions'] = active_rtplan.get('NumberOfFractionsPlanned', 'N/A')
+                    skip_result['RTPLAN_TargetPrescriptionDose'] = active_rtplan.get('TargetPrescriptionDose', 'N/A')
+                    skip_result['RTPLAN_SetupTechniqueDescription'] = active_rtplan.get('SetupTechniqueDescription', 'N/A')
+                else:
+                    skip_result['RTPLAN_StudyDescription'] = 'No RTPLAN'
+                    skip_result['RTPLAN_RTPlanName'] = 'No RTPLAN'
+                    skip_result['RTPLAN_NumberOfFractions'] = 'No RTPLAN'
+                    skip_result['RTPLAN_TargetPrescriptionDose'] = 'No RTPLAN'
+                    skip_result['RTPLAN_SetupTechniqueDescription'] = 'No RTPLAN'
+                if calc_all_parameters != 0:
+                    skip_result['APL'] = None
+                    skip_result['SDSC'] = None
+                all_results.append(skip_result)
                 continue
             
             print(f"  Common structures (after exclusions): {len(common_vois)}")
@@ -477,9 +584,31 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
                 result = {
                     'pNumber': patient_id,
                     'CTSeriesUID': ct_series_uid[-12:],  # Last 12 chars for readability
-                    'SeriesDescription': ct_series_description,
+                    'RTSTRUCT1_SeriesDescription': rtstruct1_series_desc,
+                    'RTSTRUCT2_SeriesDescription': rtstruct2_series_desc,
+                    'Enough_RTSTRUCTs': 'Yes',
+                    'RTPLAN_Present': 'Yes' if (rtplan1 is not None or rtplan2 is not None) else 'No',
+                    'Common VOI': 'Yes',
                     'VOIName': voi_name
                 }
+                
+                # Add RTPLAN metadata (use first available RTPLAN, preferring rtplan1)
+                active_rtplan = rtplan1 if rtplan1 is not None else rtplan2
+                if active_rtplan:
+                    result['RTPLAN_StudyDescription'] = active_rtplan.get('StudyDescription', 'N/A')
+                    result['RTPLAN_RTPlanName'] = active_rtplan.get('RTPlanName', 'N/A')
+                    result['RTPLAN_NumberOfFractions'] = active_rtplan.get('NumberOfFractionsPlanned', 'N/A')
+                    result['RTPLAN_TargetPrescriptionDose'] = active_rtplan.get('TargetPrescriptionDose', 'N/A')
+                    result['RTPLAN_SetupTechniqueDescription'] = active_rtplan.get('SetupTechniqueDescription', 'N/A')
+                else:
+                    result['RTPLAN_StudyDescription'] = 'No RTPLAN'
+                    result['RTPLAN_RTPlanName'] = 'No RTPLAN'
+                    result['RTPLAN_NumberOfFractions'] = 'No RTPLAN'
+                    result['RTPLAN_TargetPrescriptionDose'] = 'No RTPLAN'
+                    result['RTPLAN_SetupTechniqueDescription'] = 'No RTPLAN'
+
+                    result['RTPLAN_TargetPrescriptionDose'] = 'No RTPLAN'
+                    result['RTPLAN_SetupTechniqueDescription'] = 'No RTPLAN'
                 
                 try:
                     # Calculate volumetric DICE
@@ -488,7 +617,7 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
                     # Calculate APL and Surface DSC if requested
                     if calc_all_parameters != 0:
                         # Calculate APL
-                        temp_path_length = calculate_different_path_length_v2(
+                        temp_path_length = calculate_path_length(
                             imaging_data, rtstruct1, rtstruct2, 
                             method1_struct_no, method2_struct_no, apl_tolerance
                         )
@@ -526,7 +655,8 @@ if __name__ == '__main__':
     DICOM_ROOT_FOLDER = 'Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM'  # Update this path
     METHOD1_IDENTIFIER = 'method1'  # Update to match your folder/file naming
     METHOD2_IDENTIFIER = 'method2'  # Update to match your folder/file naming
-    MAX_PATIENTS = 10 # Limit to  patients for sample test (set to None for all patients)
+    MAX_PATIENTS = 1
+     # Limit to  patients for sample test (set to None for all patients)
     
     # Parse command-line arguments if provided
     if len(sys.argv) > 1:

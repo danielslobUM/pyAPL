@@ -3,7 +3,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX ldcm: <https://johanvansoest.nl/ontologies/LinkedDicom/>
 PREFIX schema: <https://schema.org/>
 
-SELECT ?ctSerie ?ctSeriePath ?rtStruct ?rtStructPath ?structureName
+SELECT ?ctSerie ?ctSeriePath ?rtStruct ?rtStructPath ?structureName ?rtPlan ?rtPlanPath
 WHERE {
     # Find CT Series (not individual CT images)
     ?ctSerieInstance rdf:type ldcm:Series .
@@ -36,4 +36,17 @@ WHERE {
     ?rtStructInstance ldcm:T30060020 ?structureSetROI .
     ?structureSetROI ldcm:has_sequence_item ?structureSetROIItem .
     ?structureSetROIItem ldcm:T30060026 ?structureName .
+    
+    # Find RT Plan (optional - linked through RTPLAN's Referenced Structure Set Sequence)
+    OPTIONAL {
+        # RT Plan references RT Structure Set through Referenced Structure Set Sequence (300C,0060)
+        ?rtPlanInstance rdf:type ldcm:Radiotherapy_Plan_Object .
+        ?rtPlanInstance ldcm:T300C0060 ?referencedStructSetSeq .
+        ?referencedStructSetSeq ldcm:has_sequence_item ?referencedStructSetItem .
+        ?referencedStructSetItem ldcm:T00081155 ?rtStruct .
+        
+        # Get RT Plan details
+        ?rtPlanInstance ldcm:T00080018 ?rtPlan .
+        ?rtPlanInstance schema:contentUrl ?rtPlanPath .
+    }
 }
