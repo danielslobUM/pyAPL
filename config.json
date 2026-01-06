@@ -1,0 +1,8 @@
+{
+    "description": "Configuration file for quantifycontourdifferences_P0728.py",
+    "DICOM_ROOT_FOLDER_WINDOWS": "Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM",
+    "DICOM_ROOT_FOLDER_LINUX": "/home/jovyan/r-drive/ICoNEA/DICOM",
+    "METHOD1_IDENTIFIER": "method1",
+    "METHOD2_IDENTIFIER": "method2",
+    "MAX_PATIENTS": null
+}

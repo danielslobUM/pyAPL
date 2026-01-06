@@ -652,11 +652,19 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
 if __name__ == '__main__':
     # Configuration
     # Update these paths for your dataset
-    DICOM_ROOT_FOLDER = 'Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM'  # Update this path
-    METHOD1_IDENTIFIER = 'method1'  # Update to match your folder/file naming
-    METHOD2_IDENTIFIER = 'method2'  # Update to match your folder/file naming
-    MAX_PATIENTS = 1
-     # Limit to  patients for sample test (set to None for all patients)
+    import json
+    with open('config.json', 'r') as config_file:
+        config = json.load(config_file)
+    
+    # Automatically select DICOM root folder based on operating system
+    if platform.system() == 'Linux':
+        DICOM_ROOT_FOLDER = config.get("DICOM_ROOT_FOLDER_LINUX", "/home/jovyan/r-drive/ICoNEA/DICOM")
+    else:
+        DICOM_ROOT_FOLDER = config.get("DICOM_ROOT_FOLDER_WINDOWS", "Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM")
+    
+    METHOD1_IDENTIFIER = config.get("METHOD1_IDENTIFIER", "method1")
+    METHOD2_IDENTIFIER = config.get("METHOD2_IDENTIFIER", "method2")
+    MAX_PATIENTS = config.get("MAX_PATIENTS", 1)  # Default to 1 for sample test
     
     # Parse command-line arguments if provided
     if len(sys.argv) > 1:
