@@ -39,8 +39,11 @@ WHERE {
     
     # Find RT Plan (optional - linked through RTPLAN's Referenced Structure Set Sequence)
     OPTIONAL {
+        # RT Plan can be either Radiotherapy_Plan_Object or Information_Object_Definition
+        VALUES ?rtPlanType { ldcm:Radiotherapy_Plan_Object ldcm:Information_Object_Definition }
+        ?rtPlanInstance rdf:type ?rtPlanType .
+        
         # RT Plan references RT Structure Set through Referenced Structure Set Sequence (300C,0060)
-        ?rtPlanInstance rdf:type ldcm:Radiotherapy_Plan_Object .
         ?rtPlanInstance ldcm:T300C0060 ?referencedStructSetSeq .
         ?referencedStructSetSeq ldcm:has_sequence_item ?referencedStructSetItem .
         ?referencedStructSetItem ldcm:T00081155 ?rtStruct .

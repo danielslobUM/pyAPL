@@ -58,6 +58,11 @@ def get_structs_for_ct(patient_path):
                 "structure_names": [ ],
                 "RTPLAN": None  # Each RTSTRUCT can reference one RTPLAN
             }
+            
+            # Check if SPARQL query found an RTPLAN for this RTSTRUCT
+            if not (hasattr(row, 'rtPlan') and row.rtPlan is not None):
+                print(f"  [LinkedDICOM]   ⚠ WARNING: No RTPLAN found in linkeddicom.ttl for this RTSTRUCT")
+                print(f"  [LinkedDICOM]   This means the SPARQL query did not find tag (300C,0060)→(0008,1155) link")
 
         # add structureName if not exists
         if not str(row.structureName) in ctSeries[str(row.ctSerie)]["RTSTRUCT"][str(row.rtStruct)]["structure_names"]:

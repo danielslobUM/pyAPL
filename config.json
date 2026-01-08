@@ -4,5 +4,5 @@
     "DICOM_ROOT_FOLDER_LINUX": "/home/jovyan/r-drive/ICoNEA/DICOM",
     "METHOD1_IDENTIFIER": "method1",
     "METHOD2_IDENTIFIER": "method2",
-    "MAX_PATIENTS": null
+    "MAX_PATIENTS": 3
 }

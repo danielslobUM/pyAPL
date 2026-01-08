@@ -359,6 +359,52 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
                 print(f"    [{idx}] UID: {rt_uid}{rtplan_info}")
                 print(f"        Path: {rt_path}")
             
+            # Verify RTPLAN-RTSTRUCT links by reading DICOM tags directly
+            # First, identify which RTSTRUCTs have associated RTPLANs according to linkeddicom.ttl
+            # Then verify those links by reading the actual DICOM files
+            print("\n  Verifying RTPLAN-RTSTRUCT relationships by reading DICOM files...")
+            for rt_uid, rt_path, rt_data in available_rtstructs:
+                # rt_data['RTPLAN'] contains RTPLAN info from linkeddicom.ttl (if present)
+                if rt_data['RTPLAN'] is not None:
+                    rtplan_path = translate_linkeddicom_path(rt_data['RTPLAN']['path'], dicom_root_folder)
+                    print(f"\n    Checking RTPLAN: {os.path.basename(rtplan_path)}")
+                    try:
+                        # Read RTPLAN to get Referenced Structure Set Sequence
+                        import pydicom
+                        rtplan_dcm = pydicom.dcmread(rtplan_path, stop_before_pixels=True)
+                        
+                        # Check for Referenced Structure Set Sequence (300C,0060)
+                        if (0x300C, 0x0060) in rtplan_dcm:
+                            print(f"      ✓ Found tag (300C,0060) - Referenced Structure Set Sequence")
+                            ref_struct_seq = rtplan_dcm[0x300C, 0x0060]
+                            
+                            # Check for Referenced SOP Instance UID (0008,1155) within the sequence
+                            for item in ref_struct_seq:
+                                if (0x0008, 0x1155) in item:
+                                    referenced_struct_uid = item[0x0008, 0x1155].value
+                                    print(f"      ✓ Found tag (0008,1155) - Referenced SOP Instance UID: {referenced_struct_uid}")
+                                    
+                                    # Now read the RTSTRUCT to get its SOP Instance UID (0008,0018)
+                                    rtstruct_dcm = pydicom.dcmread(rt_path, stop_before_pixels=True)
+                                    if (0x0008, 0x0018) in rtstruct_dcm:
+                                        rtstruct_sop_uid = rtstruct_dcm[0x0008, 0x0018].value
+                                        print(f"      ✓ Found tag (0008,0018) in RTSTRUCT - SOP Instance UID: {rtstruct_sop_uid}")
+                                        
+                                        # Compare the UIDs
+                                        if referenced_struct_uid == rtstruct_sop_uid:
+                                            print(f"      ✓✓ MATCH CONFIRMED! RTPLAN references this RTSTRUCT")
+                                        else:
+                                            print(f"      ✗ NO MATCH: UIDs do not match")
+                                            print(f"         Warning: LinkedDICOM metadata may be incorrect")
+                                    else:
+                                        print(f"      ✗ Tag (0008,0018) NOT found in RTSTRUCT")
+                                else:
+                                    print(f"      ✗ Tag (0008,1155) NOT found in Referenced Structure Set Sequence")
+                        else:
+                            print(f"      ✗ Tag (300C,0060) NOT found in RTPLAN")
+                    except Exception as e:
+                        print(f"      Warning: Could not verify RTPLAN-RTSTRUCT link: {str(e)}")
+            
             # Verify we have at least 2 RTSTRUCTs for comparison
             if len(available_rtstructs) < 2:
                 print(f"  Warning: Need at least 2 RTSTRUCTs for comparison. Found {len(available_rtstructs)}.")
@@ -423,8 +469,8 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
             # Read RTSTRUCT files
             try:
                 print("  Reading RTSTRUCT files...")
-                rtstruct1 = read_dicomrtstruct(rtstruct1_path)
-                rtstruct2 = read_dicomrtstruct(rtstruct2_path)
+                rtstruct1 = read_dicomrtstruct(rtstruct1_path, verbose=True)
+                rtstruct2 = read_dicomrtstruct(rtstruct2_path, verbose=True)
                 
                 # Extract Series Description from both RTSTRUCT files
                 rtstruct1_series_desc = rtstruct1.get('PlanID', 'N/A')
@@ -450,6 +496,13 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
                         print(f"    RT Plan Name: {rtplan1.get('RTPlanName', 'N/A')}")
                         print(f"    Number of Fractions: {rtplan1.get('NumberOfFractionsPlanned', 'N/A')}")
                         print(f"    Target Prescription Dose: {rtplan1.get('TargetPrescriptionDose', 'N/A')}")
+                        
+                        # Check if RTPLAN references this RTSTRUCT
+                        if 'ReferencedStructureSetSequence' in rtplan1 and len(rtplan1['ReferencedStructureSetSequence']) > 0:
+                            for ref_struct in rtplan1['ReferencedStructureSetSequence']:
+                                if ref_struct['ReferencedSOPInstanceUID'] == rtstruct1.get('SOPInstanceUID'):
+                                    print(f"    [MATCH] ✓✓ RTPLAN references RTSTRUCT 1 (UIDs match)")
+                                    break
                 except Exception as e:
                     print(f"    Warning: Could not read RTPLAN for RTSTRUCT 1: {str(e)}")
             else:
@@ -465,6 +518,13 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
                         print(f"    RT Plan Name: {rtplan2.get('RTPlanName', 'N/A')}")
                         print(f"    Number of Fractions: {rtplan2.get('NumberOfFractionsPlanned', 'N/A')}")
                         print(f"    Target Prescription Dose: {rtplan2.get('TargetPrescriptionDose', 'N/A')}")
+                        
+                        # Check if RTPLAN references this RTSTRUCT
+                        if 'ReferencedStructureSetSequence' in rtplan2 and len(rtplan2['ReferencedStructureSetSequence']) > 0:
+                            for ref_struct in rtplan2['ReferencedStructureSetSequence']:
+                                if ref_struct['ReferencedSOPInstanceUID'] == rtstruct2.get('SOPInstanceUID'):
+                                    print(f"    [MATCH] ✓✓ RTPLAN references RTSTRUCT 2 (UIDs match)")
+                                    break
                 except Exception as e:
                     print(f"    Warning: Could not read RTPLAN for RTSTRUCT 2: {str(e)}")
             else:
@@ -652,19 +712,10 @@ def quantify_contour_differences_p0728(dicom_root_folder, method1_identifier='me
 if __name__ == '__main__':
     # Configuration
     # Update these paths for your dataset
-    import json
-    with open('config.json', 'r') as config_file:
-        config = json.load(config_file)
-    
-    # Automatically select DICOM root folder based on operating system
-    if platform.system() == 'Linux':
-        DICOM_ROOT_FOLDER = config.get("DICOM_ROOT_FOLDER_LINUX", "/home/jovyan/r-drive/ICoNEA/DICOM")
-    else:
-        DICOM_ROOT_FOLDER = config.get("DICOM_ROOT_FOLDER_WINDOWS", "Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM")
-    
-    METHOD1_IDENTIFIER = config.get("METHOD1_IDENTIFIER", "method1")
-    METHOD2_IDENTIFIER = config.get("METHOD2_IDENTIFIER", "method2")
-    MAX_PATIENTS = config.get("MAX_PATIENTS", 1)  # Default to 1 for sample test
+    DICOM_ROOT_FOLDER = "Z:\\Projects\\phys\\p0728-automation\\ICoNEA\\DICOM"  # Update this path
+    METHOD1_IDENTIFIER = 'method1'  # Update to match your folder/file naming
+    METHOD2_IDENTIFIER = 'method2'  # Update to match your folder/file naming
+    MAX_PATIENTS = 5  # Limit to 3 patients for sample test (set to None for all patients)
     
     # Parse command-line arguments if provided
     if len(sys.argv) > 1:

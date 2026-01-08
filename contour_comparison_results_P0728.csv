@@ -1,169 +1,107 @@
-pNumber,CTSeriesUID,RTSTRUCT1_SeriesDescription,RTSTRUCT2_SeriesDescription,Enough_RTSTRUCTs,RTPLAN_Present,Common VOI,VOIName,RTPLAN_StudyDescription,RTPLAN_RTPlanName,RTPLAN_NumberOfFractions,RTPLAN_TargetPrescriptionDose,RTPLAN_SetupTechniqueDescription,Dice,APL,SDSC
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,BODY,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
+pNumber,CTSeriesUID,RTSTRUCT1_SeriesDescription,RTSTRUCT2_SeriesDescription,Enough_RTSTRUCTs,RTPLAN_Present,Common VOI,VOIName,RTPLAN_StudyDescription,RTPLAN_RTPlanName,RTPLAN_NumberOfFractions,RTPLAN_TargetPrescriptionDose,RTPLAN_SetupTechniqueDescription,Dice,APL,SDSC,Status
+P0728C0006I13393551,700435249914,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,No,N/A,Neck^RT_HeadNeck3mm (Adult),p1b2d1a,5,20.0,"P1B2 C3 pall
 
-HPPro 3 puntsmasker met vacuumm.
+Basisplaat + 3-punts pushpin masker
+H2
+Matras
+Losse kniefix
+
+DC vanuit lat ooghoek, gehoorgang:  lng 9",,,,No common VOIs after exclusions
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,BODY,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
+
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9992355949468761,9723.4375,0.9806158364698657,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Brain,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.9938351739100746,24540.52734375,0.9305861803505062
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Brain,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9985432816273073,1129.98046875,0.9867135559185543,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Chiasm,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.9796080036634621,12404.00390625,0.8456605718656298
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,BrainStem,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.3880281690140845,165.4296875,0.29124236252545826,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cochlea_L,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.7308099052405633,3752.4609375,0.39766407119021135
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cerebellum,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.6618004866180048,53.3203125,0.8259587020648967,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cochlea_R,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.9981976129808462,0.0,0.9977782786489359
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Chiasm,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.7082294264339152,33.49609375,0.9620991253644315,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cornea_L,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.2878338278931751,130.83984375,0.27756653992395436
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cochlea_L,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.45852534562211983,49.90234375,0.6636771300448431,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cornea_R,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.2733333333333333,77.34375,0.5991561181434599
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cochlea_R,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.4756966947504861,40.33203125,0.6648160999306038,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Eye_L,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.478134110787172,58.0078125,0.7054263565891473
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cornea_L,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9180481099656357,183.203125,0.8629320619785459,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Eye_R,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",1.0,0.0,1.0
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Cornea_R,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9429837178528278,155.859375,0.9430449069003286,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,LacrimalGland_L,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",1.0,0.0,1.0
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Eye_L,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9423280423280423,62.890625,0.9684317718940937,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,LacrimalGland_R,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.9955728804120841,0.0,1.0001829826166515
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Eye_R,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9062250598563448,67.67578125,0.9822784810126582,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Lens_L,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.9946111520789608,0.0,0.9943883277216611
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Hippocampus_L,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.7304860088365243,18.45703125,1.0198412698412698,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Lens_R,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.7291880781089414,325.48828125,0.6448818897637796
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Hippocampus_R,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.8933500627352572,0.68359375,1.0347490347490347,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,OpticNerve_L,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.377618989947923,711.5625,0.25089605734767023
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,LacrimalGland_L,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9623124771313575,35.546875,0.9788199697428139,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,OpticNerve_R,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",1.0,0.0,1.0
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,LacrimalGland_R,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.9854881266490765,10.25390625,1.0026007802340702,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Pituitary,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.9445239799570508,47.6953125,0.9689098780007871
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,OpticNerve_L,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.6435483870967742,112.109375,0.5633802816901409,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Retina_L,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.9226361031518625,99.2578125,0.9105490438001234
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,OpticNerve_R,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.5303632625085675,585.15625,0.7845963292422025,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Retina_R,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.8541612314114271,88.30078125,0.8398950131233596
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Pituitary,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
+losse kniefix",0.6275250879708067,609.765625,0.8331733077292367,
+P0728C0006I13393879,499542487227,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,SpinalCord,Head^ST_Head1mmCONTRAST (Adult),p1b2d1a,1,24.0,"stereo,
 
-Geen DC",0.6634844868735084,141.15234375,0.5228758169934641
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Retina_L,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
+ Brainlab met schaal B en kussen 1
 matrasje
-losse kniefix
-gebit IN
-
-Geen DC",1.0,0.0,1.0
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,Retina_R,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
-matrasje
-losse kniefix
-gebit IN
-
-Geen DC",1.0,0.0,1.0
-P0728C0006I13394681,118665838682,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,Yes,Yes,SpinalCord,Specials^RT_Proton_Neuro1mmCONTRAST (Adult),p1b1d1a,28,50.4,"P1B1 neuro
-
-HPPro 3 puntsmasker met vacuumm.
-matrasje
-losse kniefix
-gebit IN
-
-Geen DC",0.9998788025693855,0.0,1.000061804697157
+losse kniefix",0.971125638726638,445.01953125,0.9767713659605551,
+P0728C0006I13394026,930326090055,,,No,No,,N/A,No RTPLAN,No RTPLAN,No RTPLAN,No RTPLAN,No RTPLAN,,,,"Insufficient RTSTRUCTs (1 found, need 2)"
+P0728C0006I13395320,364480770974,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,No,Yes,BODY,No RTPLAN,No RTPLAN,No RTPLAN,No RTPLAN,No RTPLAN,0.9998184769953656,0.0,0.9998837602502325,
+P0728C0006I13396100,856475549939,Limbus RTSS v1.8.0,ARIA RadOnc Structure Sets,Yes,No,Yes,BODY,No RTPLAN,No RTPLAN,No RTPLAN,No RTPLAN,No RTPLAN,0.9895288025333845,52955.95703125,0.8333312062078031,

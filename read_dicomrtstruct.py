@@ -8,7 +8,7 @@ import pydicom
 import numpy as np
 
 
-def read_dicomrtstruct(filename_in):
+def read_dicomrtstruct(filename_in, verbose=False):
     """
     Read DICOM RTSTRUCT file and extract structure information.
     
@@ -16,6 +16,8 @@ def read_dicomrtstruct(filename_in):
     ----------
     filename_in : str
         Filename of the DICOM RTSTRUCT file including path
+    verbose : bool, optional
+        If True, print detailed tag information. Default is False.
         
     Returns
     -------
@@ -52,6 +54,9 @@ def read_dicomrtstruct(filename_in):
     # Extract study and patient information
     struct_out['StudyUID'] = dicom_header.StudyInstanceUID
     struct_out['SOPInstanceUID'] = dicom_header.SOPInstanceUID
+    
+    if verbose:
+        print(f"    [RTSTRUCT] ✓ Found tag (0008,0018) - SOP Instance UID: {struct_out['SOPInstanceUID']}")
     
     if hasattr(dicom_header, 'SeriesDescription'):
         struct_out['PlanID'] = dicom_header.SeriesDescription

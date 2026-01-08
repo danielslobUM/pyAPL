@@ -107,6 +107,23 @@ def read_dicomrtplan(filename_in):
             if setup_desc is not None:
                 plan_out['SetupTechniqueDescription'] = str(setup_desc)
         
+        # Referenced Structure Set Sequence (300C,0060) - Link to RTSTRUCT
+        plan_out['ReferencedStructureSetSequence'] = []
+        if hasattr(dicom_header, 'ReferencedStructureSetSequence'):
+            print(f"    [RTPLAN] ✓ Found tag (300C,0060) - Referenced Structure Set Sequence")
+            for idx, ref_struct in enumerate(dicom_header.ReferencedStructureSetSequence):
+                if hasattr(ref_struct, 'ReferencedSOPInstanceUID'):
+                    referenced_uid = ref_struct.ReferencedSOPInstanceUID
+                    print(f"    [RTPLAN] ✓ Found tag (0008,1155) - Referenced SOP Instance UID: {referenced_uid}")
+                    plan_out['ReferencedStructureSetSequence'].append({
+                        'ReferencedSOPInstanceUID': referenced_uid,
+                        'ReferencedSOPClassUID': getattr(ref_struct, 'ReferencedSOPClassUID', 'N/A')
+                    })
+                else:
+                    print(f"    [RTPLAN] ✗ Tag (0008,1155) NOT found in Referenced Structure Set Sequence item {idx}")
+        else:
+            print(f"    [RTPLAN] ✗ Tag (300C,0060) - Referenced Structure Set Sequence NOT found")
+        
         return plan_out
         
     except Exception as e:
