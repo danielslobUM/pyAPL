@@ -91,14 +91,16 @@ def calculate_surface_dsc(ct, struct_ref, struct_new, struct_num_1, struct_num_2
         pixel_data_overlap1 = contour1_zyx.astype(bool) & diff2
         pixel_data_overlap2 = contour2_zyx.astype(bool) & diff1
         
-        c1b2 = np.sum(pixel_data_overlap1)
-        c2b1 = np.sum(pixel_data_overlap2)
+        c1b2 = np.sum(pixel_data_overlap1)  # contour1 voxels within tolerance of contour2
+        c2b1 = np.sum(pixel_data_overlap2)  # contour2 voxels within tolerance of contour1
         
         c1 = np.sum(contour1)
         c2 = np.sum(contour2)
         
         if c1 + c2 > 0:
-            surface_dsc[tol_idx] = (2.0 * c2b1) / (c1 + c2)
+            # Use both directions for proper SDSC calculation
+            # This ensures SDSC is bounded [0, 1]
+            surface_dsc[tol_idx] = (c1b2 + c2b1) / (c1 + c2)
         else:
             surface_dsc[tol_idx] = 0.0
     

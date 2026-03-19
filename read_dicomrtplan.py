@@ -35,6 +35,7 @@ def read_dicomrtplan(filename_in):
         - RTPlanName : str - RT Plan Name (300A,0003)
         - NumberOfFractionsPlanned : int - Number of Fractions Planned (300A,0078)
         - TargetPrescriptionDose : float - Target Prescription Dose (300A,0026)
+        - DoseReferenceDescription : str - Dose Reference Description (300A,0016)
         - ReferencedDoseSequence : list - Referenced Dose Sequence (300C,0080)
         - SetupTechniqueDescription : str - Setup Technique Description (300A,01B2)
     """
@@ -77,14 +78,19 @@ def read_dicomrtplan(filename_in):
             if fractions is not None:
                 plan_out['NumberOfFractionsPlanned'] = int(fractions)
         
-        # Target Prescription Dose (300A,0026) - from DoseReferenceSequence
+        # Target Prescription Dose (300A,0026) and Dose Reference Description (300A,0016) - from DoseReferenceSequence
         plan_out['TargetPrescriptionDose'] = 'N/A'
+        plan_out['DoseReferenceDescription'] = 'N/A'
         if hasattr(dicom_header, 'DoseReferenceSequence') and len(dicom_header.DoseReferenceSequence) > 0:
-            # Try to find target prescription dose from first dose reference
+            # Try to find target prescription dose and description from first dose reference
             for dose_ref in dicom_header.DoseReferenceSequence:
                 target_dose = getattr(dose_ref, 'TargetPrescriptionDose', None)
                 if target_dose is not None:
                     plan_out['TargetPrescriptionDose'] = float(target_dose)
+                    # Also extract Dose Reference Description
+                    dose_ref_desc = getattr(dose_ref, 'DoseReferenceDescription', None)
+                    if dose_ref_desc is not None:
+                        plan_out['DoseReferenceDescription'] = str(dose_ref_desc)
                     break  # Use first available target prescription dose
         
         # Referenced Dose Sequence (300C,0080) - from FractionGroupSequence
@@ -144,6 +150,7 @@ if __name__ == '__main__':
             print(f"  RT Plan Name: {plan_data['RTPlanName']}")
             print(f"  Number of Fractions Planned: {plan_data['NumberOfFractionsPlanned']}")
             print(f"  Target Prescription Dose: {plan_data['TargetPrescriptionDose']}")
+            print(f"  Dose Reference Description: {plan_data['DoseReferenceDescription']}")
             print(f"  Setup Technique Description: {plan_data['SetupTechniqueDescription']}")
             print(f"  Referenced Dose Sequence: {plan_data['ReferencedDoseSequence']}")
     else:
