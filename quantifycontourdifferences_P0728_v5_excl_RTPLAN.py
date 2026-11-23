@@ -1,28 +1,25 @@
 """
-quantifycontourdifferences_P0728_v3 - Automated contour comparison using DICOM chain identification
+quantifycontourdifferences_P0728_v5_excl_RTPLAN - Automated contour comparison WITHOUT RTPLAN
 
-This script automatically fetches the correct data from all patients in the dataset
-using the DICOM chain identification method:
-1. Find all approved RTPLANs in patient folder
-2. For each approved RTPLAN → find referenced clinical ARIA RTSTRUCT (via SOP Instance UID)
-3. From clinical RTSTRUCT → find CT series (Frame of Reference + CT Series UID match)
-4. From clinical RTSTRUCT → find Limbus AI RTSTRUCT (Frame of Reference + CT Series UID match)
-5. Compare clinical ARIA RTSTRUCT with Limbus AI RTSTRUCT
+This script works when RTPLAN files are not available. It identifies DICOM chains using:
+1. Scan all RTSTRUCT files
+2. Identify Limbus AI RTSTRUCTs by metadata (SeriesDescription + StructureSetLabel)
+3. All non-Limbus RTSTRUCTs are considered clinical candidates
+4. Match Limbus ↔ Clinical by Frame of Reference + Referenced CT Series UID
+5. Find corresponding CT series
+6. Compare clinical RTSTRUCT with Limbus AI RTSTRUCT
 
-v3 Changes:
-- NEW: compose_struct_matrix_filtered() - Only composes COMMON structures
-- Avoids 64-structure limit by only processing structures needed for comparison
-- More efficient processing (no wasted computation on unused structures)
-- Bit positions correspond to common structure indices (1-indexed for compatibility)
+Note: Without RTPLAN, we cannot filter by approval status. All non-Limbus RTSTRUCTs
+referencing the same CT as a Limbus RTSTRUCT are treated as clinical candidates.
+
+Based on quantifycontourdifferences_P0728_v5.py
 
 Folder structure:
-DICOM -> Pxxxxxxxxxxxxxxxx -> CT/RTDOSE/RTPLAN/RTSTRUCT (folders) -> yyyymmdd -> .dcm files
+DICOM -> Pxxxxxxxxxxxxxxxx -> CT/RTSTRUCT (folders) -> yyyymmdd -> .dcm files
 
 History
 -------
-Created for P0728 dataset analysis
-v2: Refactored to use new DICOM chain identification
-v3: Optimized to only compose common structures (avoids 64-struct limit)
+Created from v5 to work without RTPLAN files
 """
 
 import os
@@ -32,12 +29,12 @@ import random
 import pydicom
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 from skimage.draw import polygon
 
 from read_dicomct_light import read_dicomct_light
 from read_dicomrtstruct import read_dicomrtstruct
-from read_dicomrtplan import read_dicomrtplan
 from calculate_dice_logical import calculate_dice_logical
 from calculate_surface_dsc import calculate_surface_dsc
 from calculate_path_length import calculate_path_length
@@ -74,17 +71,6 @@ def compose_struct_matrix_filtered(scan: dict, rtstruct: dict, structure_indices
         Matrix containing contours in binary representation.
         Each selected structure occupies one bit position based on its
         position in structure_indices list.
-        
-    Example
-    -------
-    If structure_indices = [5, 12, 23] (3 structures):
-    - Structure at index 5 gets bit position 0 (value 2^0 = 1)
-    - Structure at index 12 gets bit position 1 (value 2^1 = 2)
-    - Structure at index 23 gets bit position 2 (value 2^2 = 4)
-    
-    To check with calculate_dice_logical, use the 1-indexed position in the list:
-    - calculate_dice_logical(voi1, voi2, 1, 1) for first structure in list
-    - calculate_dice_logical(voi1, voi2, 2, 2) for second structure in list
     """
     num_structures = len(structure_indices)
     
@@ -174,88 +160,48 @@ def compose_struct_matrix_filtered(scan: dict, rtstruct: dict, structure_indices
 
 
 # ============================================================================
-# DICOM CHAIN IDENTIFICATION FUNCTIONS (from test_limbus_reference_detection_v2.py)
+# LIMBUS VERIFICATION HELPER
 # ============================================================================
 
-def scan_rtplan_files(patient_folder: str) -> Tuple[List[Dict], List[Dict]]:
+def is_verified_limbus_rtstruct(rtstruct_info: dict) -> bool:
     """
-    Scan patient folder for all RTPLAN files and identify approved ones.
+    Verify if an RTSTRUCT is a valid Limbus AI structure set.
+    
+    Verification Criteria (BOTH must be true):
+    1. SeriesDescription equals 'Limbus RTSS v1.8.0' (exact match)
+    2. StructureSetLabel equals 'Limbus RTStruct' (exact match)
     
     Parameters
     ----------
-    patient_folder : str
-        Path to patient folder
+    rtstruct_info : dict
+        Dictionary containing RTSTRUCT metadata with keys:
+        - series_description
+        - structure_set_label
         
     Returns
     -------
-    tuple
-        (all_rtplans, approved_rtplans) - Lists of RTPLAN info dictionaries
+    bool
+        True if this is a verified Limbus AI RTSTRUCT
     """
-    rtplan_folder = os.path.join(patient_folder, 'RTPLAN')
-    if not os.path.isdir(rtplan_folder):
-        rtplan_folder = patient_folder
+    series_desc = rtstruct_info.get('series_description', '')
+    struct_label = rtstruct_info.get('structure_set_label', '')
     
-    rtplan_files = []
-    for root, dirs, files in os.walk(rtplan_folder):
-        for file in files:
-            if file.lower().endswith('.dcm'):
-                filepath = os.path.join(root, file)
-                try:
-                    ds = pydicom.dcmread(filepath, stop_before_pixels=True)
-                    if ds.get('Modality', '') == 'RTPLAN':
-                        rtplan_files.append(filepath)
-                except:
-                    pass
-    
-    all_rtplans = []
-    approved_rtplans = []
-    
-    for rtplan_path in rtplan_files:
-        try:
-            ds = pydicom.dcmread(rtplan_path, stop_before_pixels=True)
-            
-            sop_uid = str(ds.get('SOPInstanceUID', ''))
-            plan_name = str(ds.get('RTPlanName', ''))
-            plan_label = str(ds.get('RTPlanLabel', ''))
-            
-            # Get approval status from tag (300E,0002)
-            approval_status = 'UNKNOWN'
-            if (0x300E, 0x0002) in ds:
-                approval_elem = ds[0x300E, 0x0002]
-                approval_status = str(approval_elem.value) if hasattr(approval_elem, 'value') else str(approval_elem)
-            
-            # Get referenced RTSTRUCT SOP Instance UID
-            ref_rtstruct_sop_uid = ''
-            if (0x300C, 0x0060) in ds:  # ReferencedStructureSetSequence
-                ref_struct_seq = ds[0x300C, 0x0060]
-                if hasattr(ref_struct_seq, 'value') and len(ref_struct_seq.value) > 0:
-                    ref_rtstruct_sop_uid = str(ref_struct_seq.value[0].get('ReferencedSOPInstanceUID', ''))
-            
-            rtplan_info = {
-                'path': rtplan_path,
-                'filename': os.path.basename(rtplan_path),
-                'sop_instance_uid': sop_uid,
-                'plan_name': plan_name,
-                'plan_label': plan_label,
-                'approval_status': approval_status,
-                'referenced_rtstruct_sop_uid': ref_rtstruct_sop_uid
-            }
-            
-            all_rtplans.append(rtplan_info)
-            
-            if approval_status == 'APPROVED':
-                approved_rtplans.append(rtplan_info)
-                
-        except Exception as e:
-            pass
-    
-    return all_rtplans, approved_rtplans
+    return (
+        series_desc == 'Limbus RTSS v1.8.0' and
+        struct_label == 'Limbus RTStruct'
+    )
 
 
-def scan_rtstruct_files(patient_folder: str) -> Tuple[List[Dict], List[Dict]]:
+# ============================================================================
+# DICOM CHAIN IDENTIFICATION FUNCTIONS (WITHOUT RTPLAN)
+# ============================================================================
+
+def scan_rtstruct_files(patient_folder: str) -> List[Dict]:
     """
     Scan patient folder for all RTSTRUCT files.
     
+    Returns ALL RTSTRUCTs with metadata.
+    
     Parameters
     ----------
     patient_folder : str
@@ -263,15 +209,14 @@ def scan_rtstruct_files(patient_folder: str) -> Tuple[List[Dict], List[Dict]]:
         
     Returns
     -------
-    tuple
-        (all_rtstructs, limbus_ai_rtstructs) - Lists of RTSTRUCT info dictionaries
+    list
+        List of all RTSTRUCT info dictionaries
     """
     rtstruct_folder = os.path.join(patient_folder, 'RTSTRUCT')
     if not os.path.isdir(rtstruct_folder):
         rtstruct_folder = patient_folder
     
     all_rtstructs = []
-    limbus_ai_rtstructs = []
     
     for root, dirs, files in os.walk(rtstruct_folder):
         for file in files:
@@ -290,6 +235,24 @@ def scan_rtstruct_files(patient_folder: str) -> Tuple[List[Dict], List[Dict]]:
                     series_uid = str(ds.get('SeriesInstanceUID', ''))
                     series_desc = str(ds.get('SeriesDescription', ''))
                     
+                    # Extract timestamp for temporal ordering
+                    # Chronological order: CT → Limbus → Clinical (approved)
+                    struct_date = str(ds.get('StructureSetDate', ''))  # (3006,0008)
+                    struct_time = str(ds.get('StructureSetTime', ''))  # (3006,0009)
+                    
+                    # Combine date and time into sortable datetime
+                    timestamp = None
+                    if struct_date:
+                        try:
+                            if struct_time:
+                                # Handle time with or without fractional seconds
+                                time_str = struct_time.split('.')[0]  # Remove fractional seconds
+                                timestamp = datetime.strptime(f"{struct_date}{time_str}", '%Y%m%d%H%M%S')
+                            else:
+                                timestamp = datetime.strptime(struct_date, '%Y%m%d')
+                        except ValueError:
+                            timestamp = None
+                    
                     # Extract referenced CT series UID from ReferencedFrameOfReferenceSequence
                     referenced_ct_series_uid = ''
                     if (0x3006, 0x0010) in ds:  # ReferencedFrameOfReferenceSequence
@@ -307,31 +270,25 @@ def scan_rtstruct_files(patient_folder: str) -> Tuple[List[Dict], List[Dict]]:
                         'path': filepath,
                         'filename': os.path.basename(filepath),
                         'model_name': model_name,
+                        'manufacturer_model': model_name,
                         'manufacturer': manufacturer,
                         'sop_instance_uid': sop_uid,
                         'series_instance_uid': series_uid,
                         'frame_of_reference_uid': frame_ref_uid,
                         'referenced_ct_series_uid': referenced_ct_series_uid,
                         'structure_set_label': struct_label,
-                        'series_description': series_desc
+                        'series_description': series_desc,
+                        'structure_set_date': struct_date,
+                        'structure_set_time': struct_time,
+                        'timestamp': timestamp
                     }
                     
                     all_rtstructs.append(info)
-                    
-                    # Detect Limbus AI RTSTRUCT using TWO criteria (both must be true):
-                    # 1. SeriesDescription equals 'Limbus RTSS v1.8.0' (exact match)
-                    # 2. AND StructureSetLabel equals 'Limbus RTStruct'
-                    is_limbus = (
-                        series_desc == 'Limbus RTSS v1.8.0' and
-                        struct_label == 'Limbus RTStruct'
-                    )
-                    if is_limbus:
-                        limbus_ai_rtstructs.append(info)
                         
                 except:
                     pass
     
-    return all_rtstructs, limbus_ai_rtstructs
+    return all_rtstructs
 
 
 def scan_ct_series(patient_folder: str) -> Dict[str, Dict]:
@@ -363,11 +320,13 @@ def scan_ct_series(patient_folder: str) -> Dict[str, Dict]:
                     if ds.get('Modality', '') == 'CT':
                         series_uid = str(ds.get('SeriesInstanceUID', ''))
                         frame_ref_uid = str(ds.get('FrameOfReferenceUID', ''))
+                        series_desc = str(ds.get('SeriesDescription', ''))
                         
                         if series_uid not in ct_series_dict:
                             ct_series_dict[series_uid] = {
                                 'series_uid': series_uid,
                                 'frame_ref_uid': frame_ref_uid,
+                                'series_description': series_desc,
                                 'file_count': 0,
                                 'folder': root,
                                 'files': []
@@ -380,11 +339,16 @@ def scan_ct_series(patient_folder: str) -> Dict[str, Dict]:
     return ct_series_dict
 
 
-def identify_dicom_chain(patient_folder: str, verbose: bool = True) -> List[Dict]:
+def identify_dicom_chain_no_rtplan(patient_folder: str, verbose: bool = True) -> List[Dict]:
     """
-    Identify complete DICOM chains for all approved RTPLANs in a patient folder.
+    Identify DICOM chains WITHOUT using RTPLAN files.
     
-    Chain: Approved RTPLAN → Clinical RTSTRUCT → CT Series → Limbus AI RTSTRUCT
+    Chain identification:
+    1. Find all Limbus AI RTSTRUCTs (by metadata verification)
+    2. For each Limbus RTSTRUCT, find clinical RTSTRUCTs with same:
+       - Frame of Reference UID
+       - Referenced CT Series UID
+    3. Find matching CT series
     
     Parameters
     ----------
@@ -397,8 +361,8 @@ def identify_dicom_chain(patient_folder: str, verbose: bool = True) -> List[Dict
     -------
     list of dict
         List of chain dictionaries, each containing:
-        - rtplan: RTPLAN info dict
-        - clinical_rtstruct: Clinical ARIA RTSTRUCT info dict (or None)
+        - rtplan: None (no RTPLAN used)
+        - clinical_rtstruct: Clinical RTSTRUCT info dict (or None)
         - ct_series: CT series info dict (or None)
         - limbus_ai_rtstruct: Limbus AI RTSTRUCT info dict (or None)
         - chain_complete: bool indicating if chain is complete
@@ -407,24 +371,42 @@ def identify_dicom_chain(patient_folder: str, verbose: bool = True) -> List[Dict
     chains = []
     
     if verbose:
-        print(f"\n  Scanning DICOM files in patient folder...")
+        print(f"\n  Scanning DICOM files in patient folder (NO RTPLAN mode)...")
     
-    # Step 1: Scan all RTPLAN files
-    all_rtplans, approved_rtplans = scan_rtplan_files(patient_folder)
+    # Step 1: Scan all RTSTRUCT files
+    all_rtstructs = scan_rtstruct_files(patient_folder)
     
     if verbose:
-        print(f"    Found {len(all_rtplans)} RTPLAN(s), {len(approved_rtplans)} approved")
+        print(f"    Found {len(all_rtstructs)} RTSTRUCT(s)")
     
-    if not approved_rtplans:
+    if not all_rtstructs:
         if verbose:
-            print(f"    ✗ No approved RTPLANs found")
+            print(f"    ✗ No RTSTRUCT files found")
         return chains
     
-    # Step 2: Scan all RTSTRUCT files
-    all_rtstructs, limbus_ai_rtstructs = scan_rtstruct_files(patient_folder)
+    # Step 2: Separate Limbus RTSTRUCTs from clinical candidates
+    limbus_rtstructs = []
+    clinical_rtstructs = []
+    
+    for rtstruct in all_rtstructs:
+        if is_verified_limbus_rtstruct(rtstruct):
+            limbus_rtstructs.append(rtstruct)
+        else:
+            clinical_rtstructs.append(rtstruct)
     
     if verbose:
-        print(f"    Found {len(all_rtstructs)} RTSTRUCT(s), {len(limbus_ai_rtstructs)} Limbus AI")
+        print(f"    → Limbus AI RTSTRUCTs: {len(limbus_rtstructs)}")
+        print(f"    → Clinical candidate RTSTRUCTs: {len(clinical_rtstructs)}")
+    
+    if not limbus_rtstructs:
+        if verbose:
+            print(f"    ✗ No Limbus AI RTSTRUCT found")
+        return chains
+    
+    if not clinical_rtstructs:
+        if verbose:
+            print(f"    ✗ No clinical RTSTRUCT candidates found")
+        return chains
     
     # Step 3: Scan all CT series
     ct_series_dict = scan_ct_series(patient_folder)
@@ -432,93 +414,133 @@ def identify_dicom_chain(patient_folder: str, verbose: bool = True) -> List[Dict
     if verbose:
         print(f"    Found {len(ct_series_dict)} CT series")
     
-    # Step 4: Build chains for each approved RTPLAN
-    for rtplan in approved_rtplans:
-        chain = {
-            'rtplan': rtplan,
-            'clinical_rtstruct': None,
-            'ct_series': None,
-            'limbus_ai_rtstruct': None,
-            'chain_complete': False,
-            'chain_status': 'Starting'
-        }
-        
+    # Step 4: Build chains starting from each Limbus RTSTRUCT
+    for limbus_rtstruct in limbus_rtstructs:
         if verbose:
-            print(f"\n    Processing approved RTPLAN: {rtplan['plan_name']} ({rtplan['filename']})")
+            print(f"\n    Processing Limbus RTSTRUCT: {limbus_rtstruct['filename']}")
         
-        # Find clinical RTSTRUCT referenced by RTPLAN (via SOP Instance UID match)
-        clinical_rtstruct = None
-        for rtstruct in all_rtstructs:
-            if rtstruct['sop_instance_uid'] == rtplan['referenced_rtstruct_sop_uid']:
-                clinical_rtstruct = rtstruct
-                break
-        
-        if not clinical_rtstruct:
-            chain['chain_status'] = 'Clinical RTSTRUCT not found'
-            if verbose:
-                print(f"      ✗ Clinical RTSTRUCT not found (SOP UID: {rtplan['referenced_rtstruct_sop_uid']})")
-            chains.append(chain)
-            continue
-        
-        chain['clinical_rtstruct'] = clinical_rtstruct
-        
-        if verbose:
-            print(f"      ✓ Found clinical RTSTRUCT: {clinical_rtstruct['filename']} (Model: {clinical_rtstruct['model_name']})")
-        
-        # Find CT series matching Frame of Reference + CT Series UID
-        matched_ct = None
-        for series_uid, ct_info in ct_series_dict.items():
-            frame_match = ct_info['frame_ref_uid'] == clinical_rtstruct['frame_of_reference_uid']
-            series_match = series_uid == clinical_rtstruct['referenced_ct_series_uid']
+        # Find clinical RTSTRUCTs matching Frame of Reference + CT Series UID
+        matching_clinical = []
+        for clinical in clinical_rtstructs:
+            frame_match = clinical['frame_of_reference_uid'] == limbus_rtstruct['frame_of_reference_uid']
+            series_match = clinical['referenced_ct_series_uid'] == limbus_rtstruct['referenced_ct_series_uid']
             
             if frame_match and series_match:
-                matched_ct = ct_info
-                break
-        
-        if not matched_ct:
-            chain['chain_status'] = 'CT series not found'
-            if verbose:
-                print(f"      ✗ CT series not found (Frame: {clinical_rtstruct['frame_of_reference_uid'][:20]}...)")
-            chains.append(chain)
-            continue
-        
-        chain['ct_series'] = matched_ct
+                matching_clinical.append(clinical)
         
         if verbose:
-            print(f"      ✓ Found CT series: {matched_ct['file_count']} slices")
+            print(f"      → Found {len(matching_clinical)} matching clinical RTSTRUCT(s)")
         
-        # Find Limbus AI RTSTRUCT matching Frame of Reference + CT Series UID
-        matched_limbus = None
-        for limbus in limbus_ai_rtstructs:
-            frame_match = limbus['frame_of_reference_uid'] == clinical_rtstruct['frame_of_reference_uid']
-            series_match = limbus['referenced_ct_series_uid'] == clinical_rtstruct['referenced_ct_series_uid']
+        if not matching_clinical:
+            chain = {
+                'rtplan': None,
+                'clinical_rtstruct': None,
+                'ct_series': None,
+                'limbus_ai_rtstruct': limbus_rtstruct,
+                'chain_complete': False,
+                'chain_status': 'No matching clinical RTSTRUCT'
+            }
+            chains.append(chain)
+            if verbose:
+                print(f"      ✗ No clinical RTSTRUCT matches Frame of Reference + CT Series")
+            continue
+        
+        # Select the correct clinical RTSTRUCT using temporal ordering
+        # Chronological order: CT → Limbus AI → Clinical (edited/approved)
+        # So we want the clinical RTSTRUCT created AFTER the Limbus RTSTRUCT
+        limbus_timestamp = limbus_rtstruct.get('timestamp')
+        
+        if limbus_timestamp is not None:
+            # Filter to clinical RTSTRUCTs created AFTER Limbus
+            clinical_after_limbus = [
+                c for c in matching_clinical 
+                if c.get('timestamp') is not None and c['timestamp'] > limbus_timestamp
+            ]
             
-            if frame_match and series_match:
-                matched_limbus = limbus
-                break
+            if clinical_after_limbus:
+                # Sort by timestamp (earliest first = first edit after Limbus)
+                clinical_after_limbus.sort(key=lambda x: x['timestamp'])
+                selected_clinical = clinical_after_limbus[0]  # First one created after Limbus
+                
+                if verbose:
+                    print(f"      → Limbus timestamp: {limbus_timestamp}")
+                    print(f"      → Found {len(clinical_after_limbus)} clinical RTSTRUCT(s) created AFTER Limbus")
+                    print(f"      → Selected: {selected_clinical['filename']} (timestamp: {selected_clinical['timestamp']})")
+                
+                matching_clinical = [selected_clinical]  # Use only the selected one
+            else:
+                # No clinical RTSTRUCT found after Limbus - check if any have timestamps
+                clinical_with_timestamps = [c for c in matching_clinical if c.get('timestamp') is not None]
+                
+                if clinical_with_timestamps:
+                    if verbose:
+                        print(f"      ⚠ No clinical RTSTRUCT found AFTER Limbus timestamp")
+                        print(f"      → Limbus: {limbus_timestamp}")
+                        for c in clinical_with_timestamps:
+                            print(f"      → Clinical: {c['filename']} at {c['timestamp']}")
+                        print(f"      → Using most recent clinical RTSTRUCT as fallback")
+                    
+                    # Fallback: use most recent clinical RTSTRUCT
+                    clinical_with_timestamps.sort(key=lambda x: x['timestamp'], reverse=True)
+                    matching_clinical = [clinical_with_timestamps[0]]
+                else:
+                    if verbose:
+                        print(f"      ⚠ Clinical RTSTRUCTs have no timestamps, using first match")
+                    matching_clinical = [matching_clinical[0]]
+        else:
+            # Limbus has no timestamp - use clinical with latest timestamp, or first match
+            clinical_with_timestamps = [c for c in matching_clinical if c.get('timestamp') is not None]
+            
+            if clinical_with_timestamps:
+                if verbose:
+                    print(f"      ⚠ Limbus has no timestamp, using most recent clinical RTSTRUCT")
+                clinical_with_timestamps.sort(key=lambda x: x['timestamp'], reverse=True)
+                matching_clinical = [clinical_with_timestamps[0]]
+            else:
+                if verbose:
+                    print(f"      ⚠ No timestamps available, using first match")
+                matching_clinical = [matching_clinical[0]]
         
-        # Fallback: if only one Limbus AI exists, use it
-        if not matched_limbus and len(limbus_ai_rtstructs) == 1:
-            matched_limbus = limbus_ai_rtstructs[0]
+        # Process the selected clinical RTSTRUCT (now only one)
+        for clinical_rtstruct in matching_clinical:
+            chain = {
+                'rtplan': None,
+                'clinical_rtstruct': clinical_rtstruct,
+                'ct_series': None,
+                'limbus_ai_rtstruct': limbus_rtstruct,
+                'chain_complete': False,
+                'chain_status': 'Starting'
+            }
+            
             if verbose:
-                print(f"      ⚠ Using single Limbus AI RTSTRUCT as fallback")
-        
-        if not matched_limbus:
-            chain['chain_status'] = 'Limbus AI RTSTRUCT not found'
+                print(f"      ✓ Found clinical RTSTRUCT: {clinical_rtstruct['filename']} (Model: {clinical_rtstruct['model_name']})")
+            
+            # Find CT series matching Frame of Reference + CT Series UID
+            matched_ct = None
+            for series_uid, ct_info in ct_series_dict.items():
+                frame_match = ct_info['frame_ref_uid'] == clinical_rtstruct['frame_of_reference_uid']
+                series_match = series_uid == clinical_rtstruct['referenced_ct_series_uid']
+                
+                if frame_match and series_match:
+                    matched_ct = ct_info
+                    break
+            
+            if not matched_ct:
+                chain['chain_status'] = 'CT series not found'
+                if verbose:
+                    print(f"      ✗ CT series not found")
+                chains.append(chain)
+                continue
+            
+            chain['ct_series'] = matched_ct
+            chain['chain_complete'] = True
+            chain['chain_status'] = 'Complete'
+            
             if verbose:
-                print(f"      ✗ Limbus AI RTSTRUCT not found")
+                print(f"      ✓ Found CT series: {matched_ct['file_count']} slices")
+                print(f"      ✓✓ CHAIN COMPLETE")
+            
             chains.append(chain)
-            continue
-        
-        chain['limbus_ai_rtstruct'] = matched_limbus
-        chain['chain_complete'] = True
-        chain['chain_status'] = 'Complete'
-        
-        if verbose:
-            print(f"      ✓ Found Limbus AI RTSTRUCT: {matched_limbus['filename']}")
-            print(f"      ✓✓ CHAIN COMPLETE")
-        
-        chains.append(chain)
     
     return chains
 
@@ -526,33 +548,6 @@ def identify_dicom_chain(patient_folder: str, verbose: bool = True) -> List[Dict
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
-
-def find_dicom_files_in_folder(folder_path: str) -> List[str]:
-    """
-    Recursively find all DICOM files (.dcm) in a folder structure.
-    
-    Parameters
-    ----------
-    folder_path : str
-        Path to folder to search
-        
-    Returns
-    -------
-    list of str
-        List of full paths to DICOM files
-    """
-    dicom_files = []
-    
-    if not os.path.isdir(folder_path):
-        return dicom_files
-    
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.lower().endswith('.dcm'):
-                dicom_files.append(os.path.join(root, file))
-    
-    return dicom_files
-
 
 def discover_patient_folders(dicom_root_folder: str) -> List[Dict]:
     """
@@ -640,16 +635,15 @@ def get_common_structures(rtstruct1: dict, rtstruct2: dict, excluded_vois: List[
 # MAIN PROCESSING FUNCTION
 # ============================================================================
 
-def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_parameters: int = 1,
-                                        max_patients: Optional[int] = None) -> pd.DataFrame:
+def quantify_contour_differences_no_rtplan(dicom_root_folder: str, calc_all_parameters: int = 1,
+                                            max_patients: Optional[int] = None) -> pd.DataFrame:
     """
-    Quantify differences between contours for all patients using DICOM chain identification.
+    Quantify differences between contours WITHOUT using RTPLAN files.
     
-    This function automatically processes all patients in the DICOM folder structure,
-    comparing Limbus AI RTSTRUCT with clinical ARIA RTSTRUCT using the approved RTPLAN
-    as the entry point for chain identification.
-    
-    v3 Optimization: Only composes common structures, avoiding 64-structure limit.
+    This function identifies DICOM chains by:
+    1. Finding Limbus AI RTSTRUCTs (by metadata)
+    2. Finding matching clinical RTSTRUCTs (same Frame of Reference + CT Series)
+    3. Finding corresponding CT series
     
     Parameters
     ----------
@@ -665,12 +659,7 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
     Returns
     -------
     pd.DataFrame
-        Table with quantitative results containing:
-        - pNumber : Patient number(s)
-        - VOIName : Structure name(s)
-        - Dice : Volumetric DICE value(s)
-        - APL : Added Path Length value(s) (if calc_all_parameters=1)
-        - SDSC : Surface DICE value(s) (if calc_all_parameters=1)
+        Table with quantitative results
     """
     # Set tolerances
     apl_tolerance = 0.1
@@ -705,18 +694,18 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
         print(f"Processing patient {patient_idx + 1}/{len(patients)}: {patient_id}")
         print(f"{'='*80}")
         
-        # Identify DICOM chains using the new method
-        print("  Using DICOM chain identification...")
-        chains = identify_dicom_chain(patient_folder, verbose=True)
+        # Identify DICOM chains WITHOUT RTPLAN
+        print("  Using DICOM chain identification (NO RTPLAN mode)...")
+        chains = identify_dicom_chain_no_rtplan(patient_folder, verbose=True)
         
         if not chains:
             print(f"  ✗ No valid DICOM chains found for this patient")
             skip_result = {
                 'pNumber': patient_id,
                 'CTSeriesUID': 'N/A',
-                'ChainStatus': 'No approved RTPLANs',
+                'ChainStatus': 'No RTSTRUCT pairs found',
                 'Enough_RTSTRUCTs': 'No',
-                'RTPLAN_Present': 'No',
+                'RTPLAN_Present': 'N/A (excluded)',
                 'Common VOI': 'N/A',
                 'VOIName': 'N/A',
                 'Dice': None,
@@ -725,6 +714,8 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
             if calc_all_parameters != 0:
                 skip_result['APL'] = None
                 skip_result['SDSC'] = None
+                skip_result['APL_tol0'] = None
+                skip_result['SDSC_tol0'] = None
             all_results.append(skip_result)
             continue
         
@@ -742,12 +733,10 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
                     'pNumber': patient_id,
                     'CTSeriesUID': chain['ct_series']['series_uid'][-12:] if chain['ct_series'] else 'N/A',
                     'ChainStatus': chain['chain_status'],
-                    'RTPLAN_Name': chain['rtplan']['plan_name'],
-                    'RTPLAN_File': chain['rtplan']['filename'],
                     'Clinical_RTSTRUCT': chain['clinical_rtstruct']['filename'] if chain['clinical_rtstruct'] else 'N/A',
                     'Limbus_AI_RTSTRUCT': chain['limbus_ai_rtstruct']['filename'] if chain['limbus_ai_rtstruct'] else 'N/A',
                     'Enough_RTSTRUCTs': 'No',
-                    'RTPLAN_Present': 'Yes',
+                    'RTPLAN_Present': 'N/A (excluded)',
                     'Common VOI': 'N/A',
                     'VOIName': 'N/A',
                     'Dice': None,
@@ -756,33 +745,19 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
                 if calc_all_parameters != 0:
                     skip_result['APL'] = None
                     skip_result['SDSC'] = None
+                    skip_result['APL_tol0'] = None
+                    skip_result['SDSC_tol0'] = None
                 all_results.append(skip_result)
                 continue
             
             # Extract chain components
-            rtplan_info = chain['rtplan']
             clinical_rtstruct_info = chain['clinical_rtstruct']
             ct_series_info = chain['ct_series']
             limbus_rtstruct_info = chain['limbus_ai_rtstruct']
             
-            print(f"    RTPLAN: {rtplan_info['plan_name']}")
             print(f"    Clinical RTSTRUCT: {clinical_rtstruct_info['filename']}")
             print(f"    Limbus AI RTSTRUCT: {limbus_rtstruct_info['filename']}")
             print(f"    CT Series: {ct_series_info['file_count']} slices")
-            
-            # Read RTPLAN metadata
-            rtplan_data = None
-            try:
-                rtplan_data = read_dicomrtplan(rtplan_info['path'])
-                if rtplan_data:
-                    print(f"\n    RTPLAN Metadata:")
-                    print(f"      Study Description: {rtplan_data.get('StudyDescription', 'N/A')}")
-                    print(f"      RT Plan Name: {rtplan_data.get('RTPlanName', 'N/A')}")
-                    print(f"      Number of Fractions: {rtplan_data.get('NumberOfFractionsPlanned', 'N/A')}")
-                    print(f"      Target Prescription Dose: {rtplan_data.get('TargetPrescriptionDose', 'N/A')}")
-                    print(f"      Dose Reference Description: {rtplan_data.get('DoseReferenceDescription', 'N/A')}")
-            except Exception as e:
-                print(f"    Warning: Could not read RTPLAN metadata: {str(e)}")
             
             # Read CT data
             print("\n    Reading CT data...")
@@ -801,7 +776,7 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
             
             # Read RTSTRUCT files
             # RTSTRUCT 1 = Limbus AI (comparison target)
-            # RTSTRUCT 2 = Clinical ARIA (reference)
+            # RTSTRUCT 2 = Clinical (reference)
             print("\n    Reading RTSTRUCT files...")
             try:
                 rtstruct1 = read_dicomrtstruct(limbus_rtstruct_info['path'], verbose=True)
@@ -832,39 +807,29 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
                     'pNumber': patient_id,
                     'CTSeriesUID': ct_series_info['series_uid'][-12:],
                     'ChainStatus': 'Complete',
-                    'RTPLAN_Name': rtplan_info['plan_name'],
-                    'RTPLAN_File': rtplan_info['filename'],
                     'Clinical_RTSTRUCT': clinical_rtstruct_info['filename'],
                     'Limbus_AI_RTSTRUCT': limbus_rtstruct_info['filename'],
                     'RTSTRUCT1_SeriesDescription': rtstruct1_series_desc,
                     'RTSTRUCT2_SeriesDescription': rtstruct2_series_desc,
                     'Enough_RTSTRUCTs': 'Yes',
-                    'RTPLAN_Present': 'Yes',
+                    'RTPLAN_Present': 'N/A (excluded)',
                     'Common VOI': 'No',
                     'VOIName': 'N/A',
                     'Dice': None,
                     'Status': 'No common VOIs after exclusions'
                 }
-                # Add RTPLAN metadata
-                if rtplan_data:
-                    skip_result['RTPLAN_StudyDescription'] = rtplan_data.get('StudyDescription', 'N/A')
-                    skip_result['RTPLAN_RTPlanName'] = rtplan_data.get('RTPlanName', 'N/A')
-                    skip_result['RTPLAN_NumberOfFractions'] = rtplan_data.get('NumberOfFractionsPlanned', 'N/A')
-                    skip_result['RTPLAN_TargetPrescriptionDose'] = rtplan_data.get('TargetPrescriptionDose', 'N/A')
-                    skip_result['RTPLAN_DoseReferenceDescription'] = rtplan_data.get('DoseReferenceDescription', 'N/A')
-                    skip_result['RTPLAN_SetupTechniqueDescription'] = rtplan_data.get('SetupTechniqueDescription', 'N/A')
                 if calc_all_parameters != 0:
                     skip_result['APL'] = None
                     skip_result['SDSC'] = None
+                    skip_result['APL_tol0'] = None
+                    skip_result['SDSC_tol0'] = None
                 all_results.append(skip_result)
                 continue
             
             print(f"\n    Common structures ({len(common_vois)}): {', '.join(common_vois)}")
             print(f"    Comparing {len(common_vois)} structure(s)")
             
-            # ================================================================
-            # v3 OPTIMIZATION: Only compose COMMON structures
-            # ================================================================
+            # Compose structure matrices (COMMON STRUCTURES ONLY)
             print("\n    Composing structure matrices (COMMON STRUCTURES ONLY)...")
             print(f"    → Limbus AI: composing {len(indices1)} of {len(vois1)} structures")
             print(f"    → Clinical: composing {len(indices2)} of {len(vois2)} structures")
@@ -896,61 +861,54 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
                     'pNumber': patient_id,
                     'CTSeriesUID': ct_series_info['series_uid'][-12:],
                     'ChainStatus': 'Complete',
-                    'RTPLAN_Name': rtplan_info['plan_name'],
-                    'RTPLAN_File': rtplan_info['filename'],
                     'Clinical_RTSTRUCT': clinical_rtstruct_info['filename'],
                     'Limbus_AI_RTSTRUCT': limbus_rtstruct_info['filename'],
                     'RTSTRUCT1_SeriesDescription': rtstruct1_series_desc,
                     'RTSTRUCT2_SeriesDescription': rtstruct2_series_desc,
                     'Enough_RTSTRUCTs': 'Yes',
-                    'RTPLAN_Present': 'Yes',
+                    'RTPLAN_Present': 'N/A (excluded)',
                     'Common VOI': 'Yes',
                     'VOIName': voi_name
                 }
                 
-                # Add RTPLAN metadata
-                if rtplan_data:
-                    result['RTPLAN_StudyDescription'] = rtplan_data.get('StudyDescription', 'N/A')
-                    result['RTPLAN_RTPlanName'] = rtplan_data.get('RTPlanName', 'N/A')
-                    result['RTPLAN_NumberOfFractions'] = rtplan_data.get('NumberOfFractionsPlanned', 'N/A')
-                    result['RTPLAN_TargetPrescriptionDose'] = rtplan_data.get('TargetPrescriptionDose', 'N/A')
-                    result['RTPLAN_DoseReferenceDescription'] = rtplan_data.get('DoseReferenceDescription', 'N/A')
-                    result['RTPLAN_SetupTechniqueDescription'] = rtplan_data.get('SetupTechniqueDescription', 'N/A')
-                else:
-                    result['RTPLAN_StudyDescription'] = 'N/A'
-                    result['RTPLAN_RTPlanName'] = 'N/A'
-                    result['RTPLAN_NumberOfFractions'] = 'N/A'
-                    result['RTPLAN_TargetPrescriptionDose'] = 'N/A'
-                    result['RTPLAN_DoseReferenceDescription'] = 'N/A'
-                    result['RTPLAN_SetupTechniqueDescription'] = 'N/A'
-                
                 try:
                     # Calculate volumetric DICE
-                    # In the filtered matrix, structures are at positions 1, 2, 3, ... (1-indexed)
-                    # struct_position is 0-indexed, so we use struct_position + 1
                     dice_idx = struct_position + 1
                     result['Dice'] = calculate_dice_logical(voi1, voi2, dice_idx, dice_idx)
                     
                     # Calculate APL and Surface DSC if requested
                     if calc_all_parameters != 0:
-                        # APL and SDSC use ORIGINAL structure indices from the RTSTRUCT
+                        # Calculate with tolerance 0.1
                         temp_path_length = calculate_path_length(
                             imaging_data, rtstruct1, rtstruct2, 
                             orig_idx1, orig_idx2, apl_tolerance
                         )
                         result['APL'] = np.sum(temp_path_length)
                         
-                        # Calculate Surface DSC
                         result['SDSC'] = calculate_surface_dsc(
                             imaging_data, rtstruct1, rtstruct2,
                             orig_idx1, orig_idx2, sdsc_tolerance
+                        )
+                        
+                        # Calculate with tolerance 0.0 (strict matching)
+                        temp_path_length_0 = calculate_path_length(
+                            imaging_data, rtstruct1, rtstruct2, 
+                            orig_idx1, orig_idx2, 0.0
+                        )
+                        result['APL_tol0'] = np.sum(temp_path_length_0)
+                        
+                        result['SDSC_tol0'] = calculate_surface_dsc(
+                            imaging_data, rtstruct1, rtstruct2,
+                            orig_idx1, orig_idx2, 0.0
                         )
                     
                     all_results.append(result)
                     print(f"        DICE: {result['Dice']:.4f}")
                     if calc_all_parameters != 0:
-                        print(f"        APL:  {result['APL']:.4f}")
-                        print(f"        SDSC: {result['SDSC']:.4f}")
+                        print(f"        APL (tol=0.1):  {result['APL']:.4f}")
+                        print(f"        SDSC (tol=0.1): {result['SDSC']:.4f}")
+                        print(f"        APL (tol=0.0):  {result['APL_tol0']:.4f}")
+                        print(f"        SDSC (tol=0.0): {result['SDSC_tol0']:.4f}")
                 
                 except Exception as e:
                     print(f"      ✗ Error calculating metrics for {voi_name}: {str(e)}")
@@ -966,13 +924,90 @@ def quantify_contour_differences_p0728(dicom_root_folder: str, calc_all_paramete
 
 
 # ============================================================================
+# EXCEL FILE HANDLING (APPEND/UPDATE)
+# ============================================================================
+
+def save_results_to_excel(results: pd.DataFrame, output_file: str = 'contour_comparison_results_excl_RTPLAN.xlsx'):
+    """
+    Save contour comparison results to Excel file.
+    
+    Logic:
+    - If file doesn't exist: create new file with results
+    - If file exists:
+        - For NEW patients: append their results
+        - For EXISTING patients: override/update their results
+    
+    Patient identification is based on 'pNumber' column.
+    
+    Parameters
+    ----------
+    results : pd.DataFrame
+        Results DataFrame from quantify_contour_differences_no_rtplan
+    output_file : str
+        Path to Excel file
+    """
+    if results is None or results.empty:
+        print("No results to save.")
+        return
+    
+    # Add timestamp to results
+    results = results.copy()
+    results['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Get unique patient IDs in new results
+    new_patients = set(results['pNumber'].unique())
+    
+    if os.path.exists(output_file):
+        try:
+            # Load existing data
+            existing_df = pd.read_excel(output_file, engine='openpyxl')
+            print(f"\nLoaded existing file with {len(existing_df)} record(s)")
+            
+            # Get existing patient IDs
+            existing_patients = set(existing_df['pNumber'].unique())
+            
+            # Determine which patients to update vs append
+            patients_to_update = new_patients & existing_patients
+            patients_to_append = new_patients - existing_patients
+            
+            if patients_to_update:
+                print(f"Updating results for {len(patients_to_update)} existing patient(s)")
+                existing_df = existing_df[~existing_df['pNumber'].isin(patients_to_update)]
+            
+            if patients_to_append:
+                print(f"Appending results for {len(patients_to_append)} new patient(s)")
+            
+            # Combine: existing (without updated patients) + all new results
+            combined_df = pd.concat([existing_df, results], ignore_index=True)
+            
+            # Sort by patient and VOI name
+            combined_df = combined_df.sort_values(['pNumber', 'CTSeriesUID', 'VOIName'])
+            
+            # Save combined results
+            combined_df.to_excel(output_file, index=False, engine='openpyxl')
+            print(f"Saved {len(combined_df)} total record(s) to {output_file}")
+            print(f"  - Total unique patients: {len(combined_df['pNumber'].unique())}")
+            
+        except Exception as e:
+            print(f"Error reading existing file: {e}")
+            print("Creating new file instead...")
+            results.to_excel(output_file, index=False, engine='openpyxl')
+            print(f"Saved {len(results)} record(s) to {output_file}")
+    else:
+        # Create new file
+        results.to_excel(output_file, index=False, engine='openpyxl')
+        print(f"\nCreated new file with {len(results)} record(s): {output_file}")
+        print(f"  - Total unique patients: {len(new_patients)}")
+
+
+# ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
 if __name__ == '__main__':
     # Configuration
-    DICOM_ROOT_FOLDER = "Z:\\ICoNEA\\DICOM\\P0728C0006I13394973"  # Update this path
-    MAX_PATIENTS = 100  # Limit for sample test (set to None for all patients)
+    DICOM_ROOT_FOLDER = "Z:\\ICoNEA\\DICOM\\P0728C0006I13351751"  # Update this path
+    MAX_PATIENTS = None  # Limit for sample test (set to None for all patients)
     
     # Parse command-line arguments if provided
     if len(sys.argv) > 1:
@@ -981,25 +1016,26 @@ if __name__ == '__main__':
         MAX_PATIENTS = int(sys.argv[2]) if sys.argv[2].lower() != 'none' else None
     
     print("=" * 80)
-    print("Quantify Contour Differences - P0728 Dataset (v3 - Common Structures Only)")
+    print("Quantify Contour Differences - WITHOUT RTPLAN")
     print("=" * 80)
     print(f"DICOM Root Folder: {DICOM_ROOT_FOLDER}")
     print(f"Max Patients: {MAX_PATIENTS if MAX_PATIENTS is not None else 'All'}")
     print("=" * 80)
-    print("\nIdentification Method:")
-    print("  1. Find approved RTPLAN(s) in patient folder")
-    print("  2. Get referenced clinical RTSTRUCT from RTPLAN (SOP Instance UID)")
-    print("  3. Find matching CT series (Frame of Reference + Series UID)")
-    print("  4. Find matching Limbus AI RTSTRUCT (Frame of Reference + Series UID)")
-    print("  5. Compare Limbus AI vs Clinical RTSTRUCT contours")
-    print("\nv3 Optimization:")
-    print("  - Only composes COMMON structures (not all structures)")
-    print("  - Avoids 64-structure limit")
-    print("  - Faster processing")
+    print("\nIdentification Method (NO RTPLAN):")
+    print("  1. Find Limbus AI RTSTRUCT(s) by metadata verification")
+    print("     - SeriesDescription == 'Limbus RTSS v1.8.0'")
+    print("     - StructureSetLabel == 'Limbus RTStruct'")
+    print("  2. Find clinical RTSTRUCT(s) matching:")
+    print("     - Same Frame of Reference UID")
+    print("     - Same Referenced CT Series UID")
+    print("  3. Find matching CT series")
+    print("  4. Compare Limbus AI vs Clinical RTSTRUCT contours")
+    print("\nNote: Without RTPLAN, approval status cannot be verified.")
+    print("      All non-Limbus RTSTRUCTs are treated as clinical candidates.")
     print("=" * 80)
     
     # Run analysis
-    results = quantify_contour_differences_p0728(
+    results = quantify_contour_differences_no_rtplan(
         dicom_root_folder=DICOM_ROOT_FOLDER,
         calc_all_parameters=1,
         max_patients=MAX_PATIENTS
@@ -1012,8 +1048,10 @@ if __name__ == '__main__':
         print(results.to_string(index=False))
         
         # Save to Excel
-        output_file = 'contour_comparison_results_P0728_v4.xlsx'
-        results.to_excel(output_file, index=False, engine='openpyxl')
-        print(f"\nResults saved to {output_file}")
+        print("\n" + "=" * 80)
+        print("SAVING RESULTS TO EXCEL")
+        print("=" * 80)
+        output_file = 'contour_comparison_results_excl_RTPLAN.xlsx'
+        save_results_to_excel(results, output_file)
     else:
         print("\nNo results generated.")

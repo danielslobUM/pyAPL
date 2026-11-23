@@ -77,7 +77,7 @@ def resample_contour_slices(rts_cs, ct, st_name):
             rts_vol = np.zeros(ct['Image'].shape)
         else:
             rts_vol = np.zeros((ct['PixelNumXi'], ct['PixelNumYi'], ct['PixelNumZi']))
-        minmax = {'minX': 1, 'maxX': 1, 'minZ': 1, 'maxZ': 1}
+        minmax = {'minX': 1, 'maxX': 1, 'minY': 1, 'maxY': 1, 'minZ': 1, 'maxZ': 1}
         return rts_vol, minmax
 
     rts_cs_aux = np.vstack(rts_cs_aux)
@@ -129,6 +129,8 @@ def resample_contour_slices(rts_cs, ct, st_name):
     minmax = {
         'minX': int(np.min(rts_cs_grid[:, 0])),
         'maxX': int(np.max(rts_cs_grid[:, 0])),
+        'minY': int(np.min(rts_cs_grid[:, 1])),
+        'maxY': int(np.max(rts_cs_grid[:, 1])),
         'minZ': int(np.min(rts_cs_grid[:, 2])),
         'maxZ': int(np.max(rts_cs_grid[:, 2]))
     }
